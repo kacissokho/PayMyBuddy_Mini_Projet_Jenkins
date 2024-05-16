@@ -63,6 +63,9 @@ pipeline {
         }
 
         stage ('Deploy in staging') {
+            when {
+                expression { GIT_BRANCH == 'main' }
+            }
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) { 
                     sh '''
@@ -87,6 +90,9 @@ pipeline {
         }
 
         stage('Test Staging') {
+            when {
+                expression { GIT_BRANCH == 'main' }
+            }
             steps {
                 sh '''
                     sleep 30
@@ -97,6 +103,9 @@ pipeline {
         }
 
         stage ('Deploy in prod') {
+            when {
+                expression { GIT_BRANCH == 'main' }
+            }
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) { 
                     sh '''
@@ -121,6 +130,9 @@ pipeline {
         }
 
         stage('Test Prod') {
+            when {
+                expression { GIT_BRANCH == 'main' }
+            }
             steps {
                 sh '''
                     sleep 30
