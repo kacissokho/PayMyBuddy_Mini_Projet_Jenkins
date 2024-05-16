@@ -89,7 +89,7 @@ pipeline {
         stage('Test Staging') {
             steps {
                 sh '''
-                    sleep 10
+                    sleep 20
                     apk add --no-cache curl
                     curl ${HOSTNAME_DEPLOY_STAGING}:8080
                 '''
@@ -123,7 +123,7 @@ pipeline {
         stage('Test Prod') {
             steps {
                 sh '''
-                    sleep 10
+                    sleep 20
                     apk add --no-cache curl
                     curl ${HOSTNAME_DEPLOY_PROD}:8080
                 '''
