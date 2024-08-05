@@ -62,10 +62,10 @@ pipeline {
 
         stage ('Deploy in staging') {
             when {
-                expression { GIT_BRANCH == 'main' }
+                expression { GIT_BRANCH == 'origin/quality-new' }
             }
             environment {
-                HOSTNAME_DEPLOY_STAGING = "34.230.2.252"
+                HOSTNAME_DEPLOY_STAGING = "52.90.103.199"
             }
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) { 
@@ -92,10 +92,10 @@ pipeline {
 
         stage ('Deploy in prod') {
             when {
-                expression { GIT_BRANCH == 'main' }
+                expression { GIT_BRANCH == 'origin/quality-new' }
             }
             environment {
-                HOSTNAME_DEPLOY_PROD = "54.145.64.29"
+                HOSTNAME_DEPLOY_PROD = "54.198.163.131"
             }
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) { 
