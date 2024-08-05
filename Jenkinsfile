@@ -28,9 +28,9 @@ pipeline {
         }
 
 
-        stage('SonarQube analysis') {
+        stage('SonarCloud analysis') {
             steps {
-                withSonarQubeEnv('SonarqubeServer') {
+                withSonarQubeEnv('SonarCloudServer') {
                     sh 'mvn sonar:sonar -s .m2/settings.xml'
                 }
             }
