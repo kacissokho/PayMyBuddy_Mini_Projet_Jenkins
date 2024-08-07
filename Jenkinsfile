@@ -11,6 +11,8 @@ pipeline {
         MYSQL_AUTH= credentials('MYSQL_AUTH')
         IMAGE_NAME= 'paymybuddy'
         IMAGE_TAG= 'latest'
+        HOSTNAME_DEPLOY_STAGING = "3.80.236.111"
+        HOSTNAME_DEPLOY_PROD = "54.161.125.70"
     }
 
     stages {
@@ -64,9 +66,6 @@ pipeline {
             when {
                 expression { GIT_BRANCH == 'origin/quality-new' }
             }
-            environment {
-                HOSTNAME_DEPLOY_STAGING = "3.80.236.111"
-            }
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) { 
                     sh '''
@@ -90,12 +89,22 @@ pipeline {
             }
         }
 
+        stage('Test Staging') {
+            when {
+                expression { GIT_BRANCH == 'main' }
+            }
+            steps {
+                sh '''
+                    sleep 10
+                    apk add --no-cache curl
+                    curl ${HOSTNAME_DEPLOY_STAGING}:8080
+                '''
+            }
+        }
+
         stage ('Deploy in prod') {
             when {
                 expression { GIT_BRANCH == 'origin/quality-new' }
-            }
-            environment {
-                HOSTNAME_DEPLOY_PROD = "54.161.125.70"
             }
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) { 
@@ -117,6 +126,19 @@ pipeline {
                             -C "$command1 && $command2 && $command3 && $command4"
                     '''
                 }
+            }
+        }
+
+        stage('Test Prod') {
+            when {
+                expression { GIT_BRANCH == 'main' }
+            }
+            steps {
+                sh '''
+                    sleep 10
+                    apk add --no-cache curl
+                    curl ${HOSTNAME_DEPLOY_PROD}:8080
+                '''
             }
         }
     }
