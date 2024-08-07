@@ -91,7 +91,7 @@ pipeline {
 
         stage('Test Staging') {
             when {
-                expression { GIT_BRANCH == 'main' }
+                expression { GIT_BRANCH == 'origin/quality-new' }
             }
             steps {
                 sh '''
@@ -131,7 +131,7 @@ pipeline {
 
         stage('Test Prod') {
             when {
-                expression { GIT_BRANCH == 'main' }
+                expression { GIT_BRANCH == 'origin/quality-new' }
             }
             steps {
                 sh '''
