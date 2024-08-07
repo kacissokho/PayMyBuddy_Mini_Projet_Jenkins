@@ -65,7 +65,7 @@ pipeline {
                 expression { GIT_BRANCH == 'origin/quality-new' }
             }
             environment {
-                HOSTNAME_DEPLOY_STAGING = "52.90.103.199"
+                HOSTNAME_DEPLOY_STAGING = "3.80.236.111"
             }
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) { 
@@ -95,7 +95,7 @@ pipeline {
                 expression { GIT_BRANCH == 'origin/quality-new' }
             }
             environment {
-                HOSTNAME_DEPLOY_PROD = "54.198.163.131"
+                HOSTNAME_DEPLOY_PROD = "54.161.125.70"
             }
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) { 
