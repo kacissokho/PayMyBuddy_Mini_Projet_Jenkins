@@ -95,7 +95,7 @@ pipeline {
             }
             steps {
                 sh '''
-                    sleep 10
+                    sleep 30
                     apk add --no-cache curl
                     curl ${HOSTNAME_DEPLOY_STAGING}:8080
                 '''
@@ -135,7 +135,7 @@ pipeline {
             }
             steps {
                 sh '''
-                    sleep 10
+                    sleep 30
                     apk add --no-cache curl
                     curl ${HOSTNAME_DEPLOY_PROD}:8080
                 '''
