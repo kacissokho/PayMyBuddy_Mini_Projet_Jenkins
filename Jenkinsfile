@@ -6,6 +6,7 @@ pipeline {
         }
     }
 
+
     environment {
         DOCKERHUB_AUTH = credentials('DockerHubCredentials')
         MYSQL_AUTH= credentials('MYSQL_AUTH')
