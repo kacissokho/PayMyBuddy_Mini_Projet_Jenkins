@@ -36,6 +36,11 @@ pipeline {
                         pip3 install awscli
                     '''
 
+                    // Configurer AWS CLI avec les credentials
+                    sh "aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}"
+                    sh "aws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY}"
+                    sh "aws configure set region ${AWS_REGION}"
+
                     // Construire le tag à partir du nom de la branche
                     def branchName = env.BRANCH_NAME ?: 'unknown' // Nom de la branche
                     def tag = "review-${branchName}"
