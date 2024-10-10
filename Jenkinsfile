@@ -23,6 +23,8 @@ pipeline {
         KEY_NAME = 'deploy-review'
         SECURITY_GROUP = 'sg-0edde05d6495254c7' // Remplacez par votre groupe de sécurité
         STORAGE = 100
+        SUBNET_ID = 'subnet-059ab491ba44695d7'
+        VPC_ID = 'vpc-012d419c1a2bb6ee5'
     }
 
     stages {
@@ -53,6 +55,7 @@ pipeline {
                         --instance-type ${INSTANCE_TYPE} \
                         --key-name ${KEY_NAME} \
                         --security-group-ids ${SECURITY_GROUP} \
+                        --subnet-id ${SUBNET_ID} \
                         --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=${STORAGE}} \
                         --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=${tag}}]'
                     """
