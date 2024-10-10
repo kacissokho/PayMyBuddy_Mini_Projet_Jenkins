@@ -64,7 +64,7 @@ pipeline {
 
         stage ('Deploy in staging') {
             when {
-                expression { GIT_BRANCH == 'origin/main' }
+                expression { GIT_BRANCH == 'origin/training' }
             }
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) { 
@@ -92,7 +92,7 @@ pipeline {
 
         stage('Test Staging') {
             when {
-                expression { GIT_BRANCH == 'origin/main' }
+                expression { GIT_BRANCH == 'origin/training' }
             }
             steps {
                 sh '''
@@ -105,7 +105,7 @@ pipeline {
 
         stage ('Deploy in prod') {
             when {
-                expression { GIT_BRANCH == 'origin/main' }
+                expression { GIT_BRANCH == 'origin/training' }
             }
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) { 
@@ -133,7 +133,7 @@ pipeline {
 
         stage('Test Prod') {
             when {
-                expression { GIT_BRANCH == 'origin/main' }
+                expression { GIT_BRANCH == 'origin/training' }
             }
             steps {
                 sh '''
