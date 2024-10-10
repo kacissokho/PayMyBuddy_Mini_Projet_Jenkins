@@ -17,7 +17,7 @@ pipeline {
 
         AWS_ACCESS_KEY_ID = credentials('aws-access-key-id') // ID de votre clé d'accès AWS
         AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key') // Secret de votre clé d'accès AWS
-        REGION = 'us-east-1' // Remplacez par votre région AWS préférée
+        AWS_REGION = 'us-east-1' // Remplacez par votre région AWS préférée
         INSTANCE_TYPE = 't2.medium'
         AMI_ID = 'ami-067ec4a660257c294'
         KEY_NAME = 'deploy-review'
