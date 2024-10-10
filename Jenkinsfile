@@ -48,7 +48,7 @@ pipeline {
                         --instance-type ${INSTANCE_TYPE} \
                         --key-name ${KEY_NAME} \
                         --security-group-ids ${SECURITY_GROUP} \
-                        --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=${STORAGE}}} \
+                        --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=${STORAGE}} \
                         --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=${tag}}]'
                     """
                     
