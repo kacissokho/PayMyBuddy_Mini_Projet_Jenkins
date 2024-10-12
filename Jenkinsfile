@@ -6,9 +6,10 @@ pipeline {
         }
     }
 
-    
-    when {
-        expression { GIT_BRANCH != 'origin/prod' }
+                
+    parameters {
+        string(name: 'IMAGE_NAME_PROD', defaultValue: 'paymybuddy')
+        string(name: 'IMAGE_TAG_PROD', defaultValue: 'latest')
     }
 
 
@@ -81,6 +82,9 @@ pipeline {
 
 
         stage('Test') {
+            when {
+                expression { GIT_BRANCH != 'origin/prod' }
+            }
             steps {
                 sh 'mvn clean test'
             }
@@ -93,6 +97,9 @@ pipeline {
         }
 
         stage('SonarCloud analysis') {
+            when {
+                expression { GIT_BRANCH != 'origin/prod' }
+            }
             steps {
                 withSonarQubeEnv('SonarCloudServer') {
                     sh 'mvn sonar:sonar -s .m2/settings.xml'
@@ -101,6 +108,9 @@ pipeline {
         }
 
         stage('Quality Gate') {
+            when {
+                expression { GIT_BRANCH != 'origin/prod' }
+            }
             steps {
                 timeout(time: 60, unit: 'SECONDS') {
                     waitForQualityGate abortPipeline: false
@@ -109,12 +119,18 @@ pipeline {
         }
 
         stage('Package') {
+            when {
+                expression { GIT_BRANCH != 'origin/prod' }
+            }
             steps {
                 sh 'mvn clean package -DskipTests'
             }
         }
 
         stage('Build and push IMAGE to docker registry') {
+            when {
+                expression { GIT_BRANCH != 'origin/prod' }
+            }
             steps {
                 sh """
                     docker build -t ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG} .
@@ -169,10 +185,6 @@ pipeline {
             when {
                 expression { GIT_BRANCH == 'origin/prod' }
             }
-            parameters {
-                string(name: 'IMAGE_NAME', defaultValue: 'paymybuddy')
-                string(name: 'IMAGE_TAG', defaultValue: 'latest')
-            }
             
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) { 
@@ -181,13 +193,13 @@ pipeline {
                         ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_PROD} >> ~/.ssh/known_hosts
                         scp -r deploy ubuntu@${HOSTNAME_DEPLOY_PROD}:/home/ubuntu/
                         command1="cd deploy && echo ${DOCKERHUB_AUTH_PSW} | docker login -u ${DOCKERHUB_AUTH_USR} --password-stdin"
-                        command2="echo 'IMAGE_VERSION=${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}' > .env && echo ${MYSQL_AUTH_PSW} > secrets/db_password.txt && echo ${MYSQL_AUTH_USR} > secrets/db_user.txt"
+                        command2="echo 'IMAGE_VERSION=${DOCKERHUB_AUTH_USR}/${IMAGE_NAME_PROD}:${IMAGE_TAG_PROD}' > .env && echo ${MYSQL_AUTH_PSW} > secrets/db_password.txt && echo ${MYSQL_AUTH_USR} > secrets/db_user.txt"
                         command3="echo 'SPRING_DATASOURCE_URL=jdbc:mysql://paymybuddydb:3306/db_paymybuddy' > env/paymybuddy.env && echo 'SPRING_DATASOURCE_PASSWORD=${MYSQL_AUTH_PSW}' >> env/paymybuddy.env && echo 'SPRING_DATASOURCE_USERNAME=${MYSQL_AUTH_USR}' >> env/paymybuddy.env"
-                        command4="docker compose down && docker pull ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
+                        command4="docker compose down && docker pull ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME_PROD}:${IMAGE_TAG_PROD}"
                         command5="docker compose up -d"
                         ssh -t ubuntu@${HOSTNAME_DEPLOY_PROD} \
-                            -o SendEnv=IMAGE_NAME \
-                            -o SendEnv=IMAGE_TAG \
+                            -o SendEnv=IMAGE_NAME_PROD \
+                            -o SendEnv=IMAGE_TAG_PROD \
                             -o SendEnv=DOCKERHUB_AUTH_USR \
                             -o SendEnv=DOCKERHUB_AUTH_PSW \
                             -o SendEnv=MYSQL_AUTH_USR \
