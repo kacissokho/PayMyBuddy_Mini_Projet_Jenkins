@@ -6,6 +6,11 @@ pipeline {
         }
     }
 
+    
+    when {
+        expression { GIT_BRANCH != 'origin/prod' }
+    }
+
 
     environment {
         DOCKERHUB_AUTH = credentials('DockerHubCredentials')
@@ -26,52 +31,52 @@ pipeline {
 
     stages {
 
-        stage('Create EC2 Instance') {
-    steps {
-        withCredentials([aws(credentialsId: 'credentialsId', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
-            script {
-                // Installer AWS CLI
-                sh '''
-                    apk add --no-cache python3 py3-pip
-                    pip3 install awscli
-                '''
+//         stage('Create EC2 Instance') {
+//     steps {
+//         withCredentials([aws(credentialsId: 'credentialsId', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+//             script {
+//                 // Installer AWS CLI
+//                 sh '''
+//                     apk add --no-cache python3 py3-pip
+//                     pip3 install awscli
+//                 '''
 
-                // Configurer AWS CLI avec les credentials
-                sh "aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}"
-                sh "aws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY}"
-                sh "aws configure set region ${AWS_REGION}"
+//                 // Configurer AWS CLI avec les credentials
+//                 sh "aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}"
+//                 sh "aws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY}"
+//                 sh "aws configure set region ${AWS_REGION}"
 
-                // Construire le tag à partir du nom de la branche
-                def branchName = env.BRANCH_NAME ?: 'unknown' // Nom de la branche
-                def tag = "review-${branchName}"
+//                 // Construire le tag à partir du nom de la branche
+//                 def branchName = env.BRANCH_NAME ?: 'unknown' // Nom de la branche
+//                 def tag = "review-${branchName}"
 
-                // User Data pour l'installation de Docker
-                def userData = """#!/bin/bash
-                curl -fsSL https://get.docker.com -o install-docker.sh
-                sh install-docker.sh --dry-run
-                sudo sh install-docker.sh
-                sudo usermod -aG docker ubuntu
-                """
+//                 // User Data pour l'installation de Docker
+//                 def userData = """#!/bin/bash
+//                 curl -fsSL https://get.docker.com -o install-docker.sh
+//                 sh install-docker.sh --dry-run
+//                 sudo sh install-docker.sh
+//                 sudo usermod -aG docker ubuntu
+//                 """
 
-                // Commande pour créer l'instance EC2
-                def createInstanceCommand = """
-                    aws ec2 run-instances \
-                    --image-id ${AMI_ID} \
-                    --count 1 \
-                    --instance-type ${INSTANCE_TYPE} \
-                    --key-name ${KEY_NAME} \
-                    --security-group-ids ${SECURITY_GROUP} \
-                    --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=${STORAGE}} \
-                    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=${tag}}]' \
-                    --user-data '${userData}'
-                """
+//                 // Commande pour créer l'instance EC2
+//                 def createInstanceCommand = """
+//                     aws ec2 run-instances \
+//                     --image-id ${AMI_ID} \
+//                     --count 1 \
+//                     --instance-type ${INSTANCE_TYPE} \
+//                     --key-name ${KEY_NAME} \
+//                     --security-group-ids ${SECURITY_GROUP} \
+//                     --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=${STORAGE}} \
+//                     --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=${tag}}]' \
+//                     --user-data '${userData}'
+//                 """
 
-                // Exécuter la commande
-                sh createInstanceCommand
-            }
-        }
-    }
-}
+//                 // Exécuter la commande
+//                 sh createInstanceCommand
+//             }
+//         }
+//     }
+// }
 
 
 
@@ -121,7 +126,7 @@ pipeline {
 
         stage ('Deploy in staging') {
             when {
-                expression { GIT_BRANCH == 'origin/training' }
+                expression { GIT_BRANCH == 'origin/staging' }
             }
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) { 
@@ -149,7 +154,7 @@ pipeline {
 
         stage('Test Staging') {
             when {
-                expression { GIT_BRANCH == 'origin/training' }
+                expression { GIT_BRANCH == 'origin/staging' }
             }
             steps {
                 sh '''
@@ -162,8 +167,13 @@ pipeline {
 
         stage ('Deploy in prod') {
             when {
-                expression { GIT_BRANCH == 'origin/training' }
+                expression { GIT_BRANCH == 'origin/prod' }
             }
+             parameters {
+                string(name: 'IMAGE_NAME', defaultValue: 'paymybuddy')
+                string(name: 'IMAGE_TAG', defaultValue: 'latest'
+            }
+            
             steps {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) { 
                     sh '''
@@ -190,7 +200,7 @@ pipeline {
 
         stage('Test Prod') {
             when {
-                expression { GIT_BRANCH == 'origin/training' }
+                expression { GIT_BRANCH == 'origin/prod' }
             }
             steps {
                 sh '''
