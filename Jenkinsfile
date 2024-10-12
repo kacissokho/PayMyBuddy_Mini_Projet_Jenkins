@@ -91,7 +91,7 @@ pipeline {
             }
         }
 
-        stage('Create EC2 Instance To review') {
+        stage('IAC Review') {
             steps {
                 withCredentials([aws(credentialsId: 'credentialsId', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                     script {
@@ -153,48 +153,121 @@ pipeline {
             }
         }
 
-        stage('Delete EC2 Instance') {
-            steps {
-                withCredentials([aws(credentialsId: 'credentialsId', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
-                    script {
-                        // Configurer AWS CLI avec les credentials
-                        sh "aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}"
-                        sh "aws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY}"
-                        sh "aws configure set region ${AWS_REGION}"
+        stage('Deploy Review') {
+    steps {
+        withCredentials([aws(credentialsId: 'credentialsId', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+            script {
+                // Configurer AWS CLI avec les credentials
+                sh "aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}"
+                sh "aws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY}"
+                sh "aws configure set region ${AWS_REGION}"
 
-                        // Construire le tag à partir du nom de la branche
-                        def branchName = GIT_BRANCH // Nom de la branche
-                        def tag = "review-${branchName}"
+                // Construire le tag à partir du nom de la branche
+                def branchName = GIT_BRANCH // Nom de la branche
+                def tag = "review-${branchName}"
 
-                        // Vérifier si une instance avec le tag existe déjà
-                        def instancesCheckCommand = """
-                            aws ec2 describe-instances \
-                            --filters "Name=tag:Name,Values=${tag}" \
-                            --query "Reservations[*].Instances[*].InstanceId" \
-                            --output text
-                        """
+                // Récupérer l'IP publique de l'instance en fonction du tag
+                def publicIpCommand = """
+                    aws ec2 describe-instances \
+                    --filters "Name=tag:Name,Values=${tag}" \
+                    --query "Reservations[*].Instances[*].PublicIpAddress" \
+                    --output text
+                """
 
-                        def existingInstance = sh(script: instancesCheckCommand, returnStdout: true).trim()
+                def publicIp = sh(script: publicIpCommand, returnStdout: true).trim()
 
-                        if (existingInstance) {
-                            echo "Suppression de l'instance avec le tag '${tag}': ${existingInstance}"
-
-                            // Commande pour supprimer l'instance EC2
-                            def deleteInstanceCommand = """
-                                aws ec2 terminate-instances \
-                                --instance-ids ${existingInstance}
-                            """
-
-                            // Exécuter la commande de suppression
-                            sh deleteInstanceCommand
-                            echo "Instance EC2 supprimée avec le tag '${tag}'."
-                        } else {
-                            echo "Aucune instance avec le tag '${tag}' à supprimer."
-                        }
-                    }
+                if (!publicIp) {
+                    error "Aucune instance trouvée avec le tag '${tag}'."
                 }
+
+                // Stocker l'IP dans une variable
+                env.HOSTNAME_DEPLOY_REVIEW = publicIp
+                echo "IP publique de l'instance : ${HOSTNAME_DEPLOY_REVIEW}"
+
+                // Préparer les commandes de déploiement
+                def deployCommands = """
+                    [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
+                    ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_REVIEW} >> ~/.ssh/known_hosts
+                    scp -r deploy ubuntu@${HOSTNAME_DEPLOY_REVIEW}:/home/ubuntu/
+                    command1="cd deploy && echo ${DOCKERHUB_AUTH_PSW} | docker login -u ${DOCKERHUB_AUTH_USR} --password-stdin"
+                    command2="echo 'IMAGE_VERSION=${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}' > .env && echo ${MYSQL_AUTH_PSW} > secrets/db_password.txt && echo ${MYSQL_AUTH_USR} > secrets/db_user.txt"
+                    command3="echo 'SPRING_DATASOURCE_URL=jdbc:mysql://paymybuddydb:3306/db_paymybuddy' > env/paymybuddy.env && echo 'SPRING_DATASOURCE_PASSWORD=${MYSQL_AUTH_PSW}' >> env/paymybuddy.env && echo 'SPRING_DATASOURCE_USERNAME=${MYSQL_AUTH_USR}' >> env/paymybuddy.env"
+                    command4="docker compose down && docker pull ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
+                    command5="docker compose up -d"
+                    ssh -t ubuntu@${HOSTNAME_DEPLOY_REVIEW} \
+                        -o SendEnv=IMAGE_NAME \
+                        -o SendEnv=IMAGE_TAG \
+                        -o SendEnv=DOCKERHUB_AUTH_USR \
+                        -o SendEnv=DOCKERHUB_AUTH_PSW \
+                        -o SendEnv=MYSQL_AUTH_USR \
+                        -o SendEnv=MYSQL_AUTH_PSW \
+                        -C "$command1 && $command2 && $command3 && $command4 && $command5"
+                """
+
+                // Exécuter les commandes de déploiement
+                sh deployCommands
             }
         }
+    }
+}
+
+
+        stage('Destroy Review') {
+    steps {
+        script {
+            // Demander une confirmation manuelle avant de continuer
+            def userInput = input(
+                id: 'userInput', 
+                message: 'Êtes-vous sûr de vouloir supprimer l\'instance EC2 ?',
+                parameters: [
+                    booleanParam(name: 'Confirmer la suppression', defaultValue: false)
+                ]
+            )
+
+            if (userInput) {
+                withCredentials([aws(credentialsId: 'credentialsId', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    // Configurer AWS CLI avec les credentials
+                    sh "aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}"
+                    sh "aws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY}"
+                    sh "aws configure set region ${AWS_REGION}"
+
+                    // Construire le tag à partir du nom de la branche
+                    def branchName = GIT_BRANCH // Nom de la branche
+                    def tag = "review-${branchName}"
+
+                    // Vérifier si une instance avec le tag existe déjà
+                    def instancesCheckCommand = """
+                        aws ec2 describe-instances \
+                        --filters "Name=tag:Name,Values=${tag}" \
+                        --query "Reservations[*].Instances[*].InstanceId" \
+                        --output text
+                    """
+
+                    def existingInstance = sh(script: instancesCheckCommand, returnStdout: true).trim()
+
+                    if (existingInstance) {
+                        echo "Suppression de l'instance avec le tag '${tag}': ${existingInstance}"
+
+                        // Commande pour supprimer l'instance EC2
+                        def deleteInstanceCommand = """
+                            aws ec2 terminate-instances \
+                            --instance-ids ${existingInstance}
+                        """
+
+                        // Exécuter la commande de suppression
+                        sh deleteInstanceCommand
+                        echo "Instance EC2 supprimée avec le tag '${tag}'."
+                    } else {
+                        echo "Aucune instance avec le tag '${tag}' à supprimer."
+                    }
+                }
+            } else {
+                echo "Suppression annulée par l'utilisateur."
+            }
+        }
+    }
+}
+
 
 
 
@@ -206,14 +279,14 @@ pipeline {
                 sshagent(credentials: ['SSH_AUTH_SERVER']) { 
                     sh '''
                         [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
-                        ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_STAGING} >> ~/.ssh/known_hosts
-                        scp -r deploy ubuntu@${HOSTNAME_DEPLOY_STAGING}:/home/ubuntu/
+                        ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_REVIEW} >> ~/.ssh/known_hosts
+                        scp -r deploy ubuntu@${HOSTNAME_DEPLOY_REVIEW}:/home/ubuntu/
                         command1="cd deploy && echo ${DOCKERHUB_AUTH_PSW} | docker login -u ${DOCKERHUB_AUTH_USR} --password-stdin"
                         command2="echo 'IMAGE_VERSION=${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}' > .env && echo ${MYSQL_AUTH_PSW} > secrets/db_password.txt && echo ${MYSQL_AUTH_USR} > secrets/db_user.txt"
                         command3="echo 'SPRING_DATASOURCE_URL=jdbc:mysql://paymybuddydb:3306/db_paymybuddy' > env/paymybuddy.env && echo 'SPRING_DATASOURCE_PASSWORD=${MYSQL_AUTH_PSW}' >> env/paymybuddy.env && echo 'SPRING_DATASOURCE_USERNAME=${MYSQL_AUTH_USR}' >> env/paymybuddy.env"
                         command4="docker compose down && docker pull ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
                         command5="docker compose up -d"
-                        ssh -t ubuntu@${HOSTNAME_DEPLOY_STAGING} \
+                        ssh -t ubuntu@${HOSTNAME_DEPLOY_REVIEW} \
                             -o SendEnv=IMAGE_NAME \
                             -o SendEnv=IMAGE_TAG \
                             -o SendEnv=DOCKERHUB_AUTH_USR \
