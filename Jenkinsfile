@@ -110,33 +110,49 @@ pipeline {
                         def branchName = GIT_BRANCH // Nom de la branche
                         def tag = "review-${branchName}"
 
-                        // User Data pour l'installation de Docker
-                        def userData = """#!/bin/bash
-                        curl -fsSL https://get.docker.com -o install-docker.sh
-                        sh install-docker.sh --dry-run
-                        sudo sh install-docker.sh
-                        sudo usermod -aG docker ubuntu
+                        // Vérifier si une instance avec le tag existe déjà
+                        def instancesCheckCommand = """
+                            aws ec2 describe-instances \
+                            --filters "Name=tag:Name,Values=${tag}" \
+                            --query "Reservations[*].Instances[*].InstanceId" \
+                            --output text
                         """
 
-                        // Commande pour créer l'instance EC2
-                        def createInstanceCommand = """
-                            aws ec2 run-instances \
-                            --image-id ${AMI_ID} \
-                            --count 1 \
-                            --instance-type ${INSTANCE_TYPE} \
-                            --key-name ${KEY_NAME} \
-                            --security-group-ids ${SECURITY_GROUP} \
-                            --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=${STORAGE}} \
-                            --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=${tag}}]' \
-                            --user-data '${userData}'
-                        """
+                        def existingInstance = sh(script: instancesCheckCommand, returnStdout: true).trim()
 
-                        // Exécuter la commande
-                        sh createInstanceCommand
+                        if (existingInstance) {
+                            echo "Une instance avec le tag '${tag}' existe déjà : ${existingInstance}"
+                        } else {
+                            // User Data pour l'installation de Docker
+                            def userData = """#!/bin/bash
+                            curl -fsSL https://get.docker.com -o install-docker.sh
+                            sh install-docker.sh --dry-run
+                            sudo sh install-docker.sh
+                            sudo usermod -aG docker ubuntu
+                            """
+
+                            // Commande pour créer l'instance EC2
+                            def createInstanceCommand = """
+                                aws ec2 run-instances \
+                                --image-id ${AMI_ID} \
+                                --count 1 \
+                                --instance-type ${INSTANCE_TYPE} \
+                                --key-name ${KEY_NAME} \
+                                --security-group-ids ${SECURITY_GROUP} \
+                                --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=${STORAGE}} \
+                                --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=${tag}}]' \
+                                --user-data '${userData}'
+                            """
+
+                            // Exécuter la commande
+                            sh createInstanceCommand
+                            echo "Instance EC2 créée avec le tag '${tag}'."
+                        }
                     }
                 }
             }
         }
+
 
         stage ('Deploy in staging') {
             when {
