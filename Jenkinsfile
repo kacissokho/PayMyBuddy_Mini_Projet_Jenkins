@@ -169,9 +169,9 @@ pipeline {
             when {
                 expression { GIT_BRANCH == 'origin/prod' }
             }
-             parameters {
+            parameters {
                 string(name: 'IMAGE_NAME', defaultValue: 'paymybuddy')
-                string(name: 'IMAGE_TAG', defaultValue: 'latest'
+                string(name: 'IMAGE_TAG', defaultValue: 'latest')
             }
             
             steps {
