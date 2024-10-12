@@ -28,7 +28,7 @@ pipeline {
 
         stage('Create EC2 Instance') {
     steps {
-        withCredentials([aws(credentialsId: 'AwsCredentials', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+        withCredentials([aws(credentialsId: 'credentialsId', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
             script {
                 // Installer AWS CLI
                 sh '''
