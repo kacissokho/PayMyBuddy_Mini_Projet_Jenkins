@@ -16,10 +16,10 @@ pipeline {
     environment {
         DOCKERHUB_AUTH = credentials('DockerHubCredentials')
         MYSQL_AUTH= credentials('MYSQL_AUTH')
-        HOSTNAME_DEPLOY_PROD = "3.85.13.86"
-        HOSTNAME_DEPLOY_STAGING = "34.207.86.25"
+        HOSTNAME_DEPLOY_PROD = "54.197.76.44"
+        HOSTNAME_DEPLOY_STAGING = "18.208.156.10"
         IMAGE_NAME= 'paymybuddy'
-        IMAGE_TAG= 'latest'
+        IMAGE_TAG= '1.0'
         AWS_REGION = 'us-east-1' // Remplacez par votre région AWS préférée
         INSTANCE_TYPE = 't2.medium'
         AMI_ID = 'ami-0866a3c8686eaeeba'
