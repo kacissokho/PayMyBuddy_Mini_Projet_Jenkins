@@ -26,9 +26,9 @@ pipeline {
 
     stages {
 
-        stage('Create EC2 Instance') {
+       stage('Create EC2 Instance') {
             steps {
-                withCredentials([aws(credentialsId: 'AwsCredentials', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                withCredentials([aws(credentialsId: 'credentialsId', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                     script {
                         // Installer AWS CLI
                         sh '''
@@ -56,13 +56,14 @@ pipeline {
                             --block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=${STORAGE}} \
                             --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=${tag}}]'
                         """
-                        
+
                         // Exécuter la commande
                         sh createInstanceCommand
                     }
                 }
             }
         }
+
 
         stage('Test') {
             steps {
