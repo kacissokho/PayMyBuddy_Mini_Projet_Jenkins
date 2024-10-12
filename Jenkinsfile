@@ -153,6 +153,50 @@ pipeline {
             }
         }
 
+        stage('Delete EC2 Instance') {
+            steps {
+                withCredentials([aws(credentialsId: 'credentialsId', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    script {
+                        // Configurer AWS CLI avec les credentials
+                        sh "aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}"
+                        sh "aws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY}"
+                        sh "aws configure set region ${AWS_REGION}"
+
+                        // Construire le tag à partir du nom de la branche
+                        def branchName = GIT_BRANCH // Nom de la branche
+                        def tag = "review-${branchName}"
+
+                        // Vérifier si une instance avec le tag existe déjà
+                        def instancesCheckCommand = """
+                            aws ec2 describe-instances \
+                            --filters "Name=tag:Name,Values=${tag}" \
+                            --query "Reservations[*].Instances[*].InstanceId" \
+                            --output text
+                        """
+
+                        def existingInstance = sh(script: instancesCheckCommand, returnStdout: true).trim()
+
+                        if (existingInstance) {
+                            echo "Suppression de l'instance avec le tag '${tag}': ${existingInstance}"
+
+                            // Commande pour supprimer l'instance EC2
+                            def deleteInstanceCommand = """
+                                aws ec2 terminate-instances \
+                                --instance-ids ${existingInstance}
+                            """
+
+                            // Exécuter la commande de suppression
+                            sh deleteInstanceCommand
+                            echo "Instance EC2 supprimée avec le tag '${tag}'."
+                        } else {
+                            echo "Aucune instance avec le tag '${tag}' à supprimer."
+                        }
+                    }
+                }
+            }
+        }
+
+
 
         stage ('Deploy in staging') {
             when {
