@@ -30,6 +30,7 @@ pipeline {
         }
 
         stage('Package') {
+            stage('Build Jar') {
             steps {
                 sh 'mvn clean package -DskipTests'
             }
