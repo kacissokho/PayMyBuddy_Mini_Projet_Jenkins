@@ -21,7 +21,6 @@ pipeline {
             steps {
                 sh 'mvn clean test'
             }
-
             post {
                 always {
                     junit 'target/surefire-reports/*.xml'
@@ -30,11 +29,9 @@ pipeline {
         }
 
         stage('Package') {
-            stage('Build Jar') {
             steps {
                 sh 'mvn clean package -DskipTests'
             }
-        }
         }
 
         stage('Build and push IMAGE to docker registry') {
