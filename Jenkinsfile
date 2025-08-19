@@ -17,12 +17,6 @@ pipeline {
 
     stages {
         
-        stage('Package') {
-            steps {
-                sh 'mvn clean package -DskipTests'
-            }
-        }
-
         stage('Build and push IMAGE to docker registry') {
             steps {
                 sh """
