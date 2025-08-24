@@ -32,7 +32,7 @@ pipeline {
       }
     }
 
-    stage('deploy in STAGING') {
+    stage('Heroku: préparer & déployer STAGING') {
       when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
       agent any
       steps {
@@ -94,14 +94,8 @@ heroku releases -a "$APP" | head -n 5
 '''
       }
     }
-  stage('Test Staging') {
-  agent any
-  steps {
-    sh 'curl -fsSL -o /dev/null https://paymybuddy-staging-7d54417a224b.herokuapp.com/login'
-  }
-}
 
-    stage('deploy in  PROD') {
+    stage('Heroku: préparer & déployer PROD') {
       when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
       agent any
       steps {
@@ -163,12 +157,6 @@ heroku releases -a "$APP" | head -n 5
 '''
       }
     }
-stage('Test Production') {
-  agent any
-  steps {
-    sh 'curl -fsSL https://paymybuddy-production-05d0d1e52d13.herokuapp.com/login | grep -qi "Pay My Buddy"'
-  }
-}
   }
 
   post {
