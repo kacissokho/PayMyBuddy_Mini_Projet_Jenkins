@@ -1,110 +1,178 @@
 pipeline {
-    agent {
-        dockerfile {
-            filename 'Dockerfile'
-            args '-v /root/.m2:/root/.m2 -v /var/run/docker.sock:/var/run/docker.sock'
-        }
+  agent none
+
+  environment {
+    // Image locale
+    DOCKER_USERNAME = 'kacissokho'
+    IMAGE_NAME      = 'paymybuddy'
+    IMAGE_TAG       = 'v1.4'
+    PORT_EXPOSED    = '8090'
+
+    // Apps Heroku
+    STAGING    = 'paymybuddy-staging'
+    PRODUCTION = 'paymybuddy-production'
+
+    // Provisionner JawsDB automatiquement si absent
+    AUTO_PROVISION_JAWSDB = 'true'
+
+    HEROKU_API_KEY = credentials('heroku_api_key')
+  }
+
+  stages {
+
+    stage('Checkout') {
+      agent any
+      steps { checkout scm }
     }
 
-    environment {
-        DOCKERHUB_AUTH = credentials('kacissokho')
-        MYSQL_AUTH = credentials('MYSQL_AUTH')
-        IMAGE_NAME = 'paymybuddy'
-        IMAGE_TAG = 'latest'
-        HOSTNAME_DEPLOY_STAGING = "54.92.175.115"
-        HOSTNAME_DEPLOY_PROD = "54.226.144.55"
+    stage('Build image') {
+      agent any
+      steps {
+        sh 'docker build -t ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} .'
+      }
     }
 
-    stages {
-        
-        stage('Build and push IMAGE to docker registry') {
-            steps {
-                sh """
-                    docker build --secret id=db_user,env=SPRING_DATASOURCE_USER --secret id=db_password,env=SPRING_DATASOURCE_PASSWORD -t ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG} .
-                    echo ${DOCKERHUB_AUTH_PSW} | docker login -u ${DOCKERHUB_AUTH_USR} --password-stdin
-                    docker push ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}
-                """
-            }
-        }
+    stage('deploy in STAGING') {
+      when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
+      agent any
+      steps {
+        sh '''
+set -eu
+heroku container:login
+APP="${STAGING}"
+heroku apps:info -a "$APP" >/dev/null 2>&1 || heroku create "$APP"
+heroku stack:set container -a "$APP"
 
-        stage('Deploy in staging') {
-            when {
-                expression { GIT_BRANCH == 'main' }
-            }
-            steps {
-                sshagent(credentials: ['SSH_AUTH_SERVER']) { 
-                    sh '''
-                        [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
-                        ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_STAGING} >> ~/.ssh/known_hosts
-                        scp -r deploy ubuntu@${HOSTNAME_DEPLOY_STAGING}:/home/ubuntu/
-                        command1="cd deploy && echo ${DOCKERHUB_AUTH_PSW} | docker login -u ${DOCKERHUB_AUTH_USR} --password-stdin"
-                        command2="echo 'IMAGE_VERSION=${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}' > .env && echo ${MYSQL_AUTH_PSW} > secrets/db_password.txt && echo ${MYSQL_AUTH_USR} > secrets/db_user.txt"
-                        command3="docker compose down && docker pull ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
-                        command4="docker compose up -d"
-                        ssh -t ubuntu@${HOSTNAME_DEPLOY_STAGING} \
-                            -o SendEnv=IMAGE_NAME \
-                            -o SendEnv=IMAGE_TAG \
-                            -o SendEnv=DOCKERHUB_AUTH_USR \
-                            -o SendEnv=DOCKERHUB_AUTH_PSW \
-                            -o SendEnv=MYSQL_AUTH_USR \
-                            -o SendEnv=MYSQL_AUTH_PSW \
-                            -C "$command1 && $command2 && $command3 && $command4"
-                    '''
-                }
-            }
-        }
+ensure_db() {
+  local app="$1"
+  local auto="${AUTO_PROVISION_JAWSDB}"
 
-        stage('Test Staging') {
-            when {
-                expression { GIT_BRANCH == 'main' }
-            }
-            steps {
-                sh '''
-                    sleep 30
-                    sudo apt-get update -y && sudo apt-get install -y curl
-                    curl ${HOSTNAME_DEPLOY_STAGING}:8080
-                '''
-            }
-        }
+  local jurl
+  jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
 
-        stage('Deploy in prod') {
-            when {
-                expression { GIT_BRANCH == 'main' }
-            }
-            steps {
-                sshagent(credentials: ['SSH_AUTH_SERVER']) { 
-                    sh '''
-                        [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
-                        ssh-keyscan -t rsa,dsa ${HOSTNAME_DEPLOY_PROD} >> ~/.ssh/known_hosts
-                        scp -r deploy ubuntu@${HOSTNAME_DEPLOY_PROD}:/home/ubuntu/
-                        command1="cd deploy && echo ${DOCKERHUB_AUTH_PSW} | docker login -u ${DOCKERHUB_AUTH_USR} --password-stdin"
-                        command2="echo 'IMAGE_VERSION=${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}' > .env && echo ${MYSQL_AUTH_PSW} > secrets/db_password.txt && echo ${MYSQL_AUTH_USR} > secrets/db_user.txt"
-                        command3="docker compose down && docker pull ${DOCKERHUB_AUTH_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
-                        command4="docker compose up -d"
-                        ssh -t ubuntu@${HOSTNAME_DEPLOY_PROD} \
-                            -o SendEnv=IMAGE_NAME \
-                            -o SendEnv=IMAGE_TAG \
-                            -o SendEnv=DOCKERHUB_AUTH_USR \
-                            -o SendEnv=DOCKERHUB_AUTH_PSW \
-                            -o SendEnv=MYSQL_AUTH_USR \
-                            -o SendEnv=MYSQL_AUTH_PSW \
-                            -C "$command1 && $command2 && $command3 && $command4"
-                    '''
-                }
-            }
-        }
+  if [ -z "$jurl" ] && [ "$auto" = "true" ]; then
+    echo "JawsDB absent sur $app → provisioning…"
+    heroku addons:create jawsdb:kitefin -a "$app" || true
 
-        stage('Test Prod') {
-            when {
-                expression { GIT_BRANCH == 'main' }
-            }
-            steps {
-                sh '''
-                    sleep 30
-                    sudo apt-get update -y && sudo apt-get install -y curl
-                    curl ${HOSTNAME_DEPLOY_PROD}:8080
-                '''
-            }
-        }
+    echo "Attente que JAWSDB_URL soit disponible…"
+    for i in $(seq 1 24); do
+      jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
+      if [ -n "$jurl" ]; then
+        echo "JAWSDB_URL détectée."
+        break
+      fi
+      echo "…pas encore prêt (tentative $i/24), on réessaie dans 5s"
+      sleep 5
+    done
+  fi
+
+  if [ -z "$jurl" ]; then
+    echo "ERREUR: JAWSDB_URL est vide/inexistant sur $app. Abandon."
+    exit 1
+  fi
+
+  local user pass host db
+  user="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\1|')"
+  pass="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\2|')"
+  host="$(echo "$jurl" | sed -E 's|mysql://[^@]+@([^/]+)/.*|\\1|')"
+  db="$(  echo "$jurl" | sed -E 's|.*/([^?]+).*|\\1|')"
+
+  heroku config:set -a "$app" \
+    SPRING_DATASOURCE_URL="jdbc:mysql://${host}/${db}?useSSL=false&serverTimezone=UTC" \
+    SPRING_DATASOURCE_USERNAME="${user}" \
+    SPRING_DATASOURCE_PASSWORD="${pass}" >/dev/null
+}
+
+ensure_db "$APP"
+
+docker tag ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} registry.heroku.com/${APP}/web
+docker push registry.heroku.com/${APP}/web
+heroku container:release -a "$APP" web
+
+heroku ps:scale web=1 -a "$APP" || true
+heroku releases -a "$APP" | head -n 5
+'''
+      }
     }
+  stage('Test Staging') {
+  agent any
+  steps {
+    sh 'curl -fsSL -o /dev/null https://paymybuddy-staging-7d54417a224b.herokuapp.com/login'
+  }
+}
+
+    stage('deploy in  PROD') {
+      when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
+      agent any
+      steps {
+        sh '''
+set -eu
+heroku container:login
+APP="${PRODUCTION}"
+heroku apps:info -a "$APP" >/dev/null 2>&1 || heroku create "$APP"
+heroku stack:set container -a "$APP"
+
+ensure_db() {
+  local app="$1"
+  local auto="${AUTO_PROVISION_JAWSDB}"
+
+  local jurl
+  jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
+
+  if [ -z "$jurl" ] && [ "$auto" = "true" ]; then
+    echo "JawsDB absent sur $app → provisioning…"
+    heroku addons:create jawsdb:kitefin -a "$app" || true
+
+    echo "Attente que JAWSDB_URL soit disponible…"
+    for i in $(seq 1 24); do
+      jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
+      if [ -n "$jurl" ]; then
+        echo "JAWSDB_URL détectée."
+        break
+      fi
+      echo "…pas encore prêt (tentative $i/24), on réessaie dans 5s"
+      sleep 5
+    done
+  fi
+
+  if [ -z "$jurl" ]; then
+    echo "ERREUR: JAWSDB_URL est vide/inexistant sur $app. Abandon."
+    exit 1
+  fi
+
+  local user pass host db
+  user="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\1|')"
+  pass="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\2|')"
+  host="$(echo "$jurl" | sed -E 's|mysql://[^@]+@([^/]+)/.*|\\1|')"
+  db="$(  echo "$jurl" | sed -E 's|.*/([^?]+).*|\\1|')"
+
+  heroku config:set -a "$app" \
+    SPRING_DATASOURCE_URL="jdbc:mysql://${host}/${db}?useSSL=false&serverTimezone=UTC" \
+    SPRING_DATASOURCE_USERNAME="${user}" \
+    SPRING_DATASOURCE_PASSWORD="${pass}" >/dev/null
+}
+
+ensure_db "$APP"
+
+docker tag ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} registry.heroku.com/${APP}/web
+docker push registry.heroku.com/${APP}/web
+heroku container:release -a "$APP" web
+
+heroku ps:scale web=1 -a "$APP" || true
+heroku releases -a "$APP" | head -n 5
+'''
+      }
+    }
+  }
+
+stage('Test Production') {
+  agent any
+  steps {
+    sh 'curl -fsSL https://paymybuddy-production-05d0d1e52d13.herokuapp.com/login | grep -qi "Pay My Buddy"'
+  }
+}
+
+  post {
+    always { echo 'Pipeline terminé.' }
+  }
 }
