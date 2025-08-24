@@ -163,14 +163,13 @@ heroku releases -a "$APP" | head -n 5
 '''
       }
     }
-  }
-
 stage('Test Production') {
   agent any
   steps {
     sh 'curl -fsSL https://paymybuddy-production-05d0d1e52d13.herokuapp.com/login | grep -qi "Pay My Buddy"'
   }
 }
+  }
 
   post {
     always { echo 'Pipeline terminé.' }
