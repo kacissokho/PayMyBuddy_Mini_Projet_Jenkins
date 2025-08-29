@@ -1,13 +1,11 @@
-# ---- build ----
-FROM maven:3.9-eclipse-temurin-17 AS build
-WORKDIR /src
-COPY pom.xml .
-RUN mvn -B -q -DskipTests dependency:go-offline
-COPY src ./src
-RUN mvn -B -DskipTests package
+# Runtime uniquement (léger)
+FROM amazoncorretto:17-alpine
 
-# ---- runtime ----
-FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
-COPY --from=build /src/target/*jar /app/app.jar
+
+# Copie n'importe quel jar buildé dans target/
+COPY target/*jar /app/app.jar
+
+# IMPORTANT pour Heroku : écouter le port assigné
+# et supporter les flags mémoire depuis JAVA_OPTS si tu en as
 CMD ["sh", "-c", "java $JAVA_OPTS -Dserver.port=$PORT -jar /app/app.jar"]
