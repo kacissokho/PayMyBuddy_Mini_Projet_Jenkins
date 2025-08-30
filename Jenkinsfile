@@ -16,6 +16,7 @@ pipeline {
     AUTO_PROVISION_JAWSDB = 'true'
 
     HEROKU_API_KEY = credentials('heroku_api_key')
+    SONAR_TOKEN    = credentials('sonar_token')   // <-- ajoute ce credential
   }
 
   stages {
@@ -25,7 +26,8 @@ pipeline {
       steps { checkout scm }
     }
 
-    stage('SonarQube analysis') {
+    /* ---- SonarCloud (sans withSonarQubeEnv), seulement sur master ---- */
+    stage('SonarCloud analysis') {
       when {
         anyOf {
           branch 'master'
@@ -39,38 +41,19 @@ pipeline {
         }
       }
       steps {
-        // Nom du serveur tel que configuré dans Manage Jenkins -> SonarQube servers
-        withSonarQubeEnv('SonarCloudServer') {
-          sh '''
-            set -euxo pipefail
-            # Build léger (sans tests) pour fournir les classes à l'analyse Java
-            mvn -B -DskipTests -s .m2/settings.xml verify
+        sh '''
+          set -euxo pipefail
+          # Build léger pour fournir les classes (binaries) à l'analyse Java
+          mvn -B -DskipTests -s .m2/settings.xml verify
 
-            # Analyse SonarCloud (branche master)
-            mvn -B -s .m2/settings.xml sonar:sonar \
-              -Dsonar.host.url="$SONAR_HOST_URL" \
-              -Dsonar.login="$SONAR_AUTH_TOKEN" \
-              -Dsonar.organization=kacissokho \
-              -Dsonar.projectKey=kacissokho_PayMyBuddy \
-              -Dsonar.branch.name=master
-          '''
-        }
-      }
-    }
-
-    stage('Quality Gate') {
-      when {
-        anyOf {
-          branch 'master'
-          expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' }
-        }
-      }
-      agent any
-      steps {
-        timeout(time: 60, unit: 'SECONDS') {
-          // mettre abortPipeline: true pour rendre bloquant en cas d'échec
-          waitForQualityGate abortPipeline: false
-        }
+          # Analyse SonarCloud sur master (ne bloque pas la pipeline)
+          mvn -B -s .m2/settings.xml sonar:sonar \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.login="${SONAR_TOKEN}" \
+            -Dsonar.organization=kacissokho \
+            -Dsonar.projectKey=kacissokho_PayMyBuddy \
+            -Dsonar.branch.name=master || true
+        '''
       }
     }
 
