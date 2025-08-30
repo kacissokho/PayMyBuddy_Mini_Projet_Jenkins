@@ -28,34 +28,36 @@ pipeline {
 
     /* ---- SonarCloud (sans withSonarQubeEnv), seulement sur master ---- */
     stage('SonarCloud analysis') {
-      when {
-        anyOf {
-          branch 'master'
-          expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' }
-        }
-      }
-      agent {
-        docker {
-          image 'maven:3.9-eclipse-temurin-17'
-          args '-v $HOME/.m2:/root/.m2'
-        }
-      }
-      steps {
-        sh '''
-          set -euxo pipefail
-          # Build léger pour fournir les classes (binaries) à l'analyse Java
-          mvn -B -DskipTests -s .m2/settings.xml verify
-
-          # Analyse SonarCloud sur master (ne bloque pas la pipeline)
-          mvn -B -s .m2/settings.xml sonar:sonar \
-            -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.login="${SONAR_TOKEN}" \
-            -Dsonar.organization=kacissokho \
-            -Dsonar.projectKey=kacissokho_PayMyBuddy \
-            -Dsonar.branch.name=master || true
-        '''
-      }
+  when {
+    anyOf {
+      branch 'master'
+      expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' }
     }
+  }
+  agent {
+    docker {
+      image 'maven:3.9-eclipse-temurin-17'
+      args '-v $HOME/.m2:/root/.m2'
+    }
+  }
+  steps {
+    sh '''
+      set -eux  # (pas de -o pipefail en /bin/sh)
+
+      # Build léger pour fournir les classes à l’analyse
+      mvn -B -DskipTests -s .m2/settings.xml verify
+
+      # Analyse SonarCloud sur master (ne bloque pas la pipeline)
+      mvn -B -s .m2/settings.xml sonar:sonar \
+        -Dsonar.host.url=https://sonarcloud.io \
+        -Dsonar.login="${SONAR_TOKEN}" \
+        -Dsonar.organization=kacissokho \
+        -Dsonar.projectKey=kacissokho_PayMyBuddy \
+        -Dsonar.branch.name=master || true
+    '''
+  }
+}
+
 
     stage('Build image') {
       agent any
