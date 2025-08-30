@@ -24,21 +24,55 @@ pipeline {
       agent any
       steps { checkout scm }
     }
- stage('SonarQube analysis') {
-            steps {
-                withSonarQubeEnv('SonarCloudServer') {
-                    sh 'mvn sonar:sonar -s .m2/settings.xml'
-                }
-            }
-        }
 
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 60, unit: 'SECONDS') {
-                    waitForQualityGate abortPipeline: false
-                }
-            }
+    stage('SonarQube analysis') {
+      when {
+        anyOf {
+          branch 'master'
+          expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' }
         }
+      }
+      agent {
+        docker {
+          image 'maven:3.9-eclipse-temurin-17'
+          args '-v $HOME/.m2:/root/.m2'
+        }
+      }
+      steps {
+        // Nom du serveur tel que configuré dans Manage Jenkins -> SonarQube servers
+        withSonarQubeEnv('SonarCloudServer') {
+          sh '''
+            set -euxo pipefail
+            # Build léger (sans tests) pour fournir les classes à l'analyse Java
+            mvn -B -DskipTests -s .m2/settings.xml verify
+
+            # Analyse SonarCloud (branche master)
+            mvn -B -s .m2/settings.xml sonar:sonar \
+              -Dsonar.host.url="$SONAR_HOST_URL" \
+              -Dsonar.login="$SONAR_AUTH_TOKEN" \
+              -Dsonar.organization=kacissokho \
+              -Dsonar.projectKey=kacissokho_PayMyBuddy \
+              -Dsonar.branch.name=master
+          '''
+        }
+      }
+    }
+
+    stage('Quality Gate') {
+      when {
+        anyOf {
+          branch 'master'
+          expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' }
+        }
+      }
+      agent any
+      steps {
+        timeout(time: 60, unit: 'SECONDS') {
+          // mettre abortPipeline: true pour rendre bloquant en cas d'échec
+          waitForQualityGate abortPipeline: false
+        }
+      }
+    }
 
     stage('Build image') {
       agent any
