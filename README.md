@@ -1,68 +1,81 @@
-### PayMyBuddy Application
+Objectif
+Concevoir une pipeline CI/CD Jenkins qui :
 
-The PayMyBuddy application is a Java-based application that uses MySQL as its backend database. 
+garantit la qualité & sécurité du code (tests + SonarCloud),
 
-This project uses Docker and Docker Compose to define and orchestrate the environment.
+package l’application (image Docker), publie l’image sur Docker Hub (traçabilité/artefact),
 
-### Requirements:
+déploie automatiquement sur Heroku (staging puis production via promotion),
 
-Install docker and docker compose
+notifie l’équipe sur Slack du statut final.
 
- Clone the application:
- git clone git@github.com:kacissokho/bootcamp-project-update.git
+Architecture d’exécution (vue d’ensemble)
+GitHub (push/PR) → Webhook → Jenkins.
 
-Move to the cloned repos: cd bootcamp-project-update/mini-projet-docker
+Jenkins (agents Docker)
 
-### Build :
+Tests unitaires & d’intégration (Maven/JDK 17)
 
-Build the image with the command: docker build -t paymybuddy:v1 . 
+Analyse SonarCloud (Quality Gate)
 
-check the images with the command: docker images
+Build JAR → docker build → tag
 
-**![](https://github.com/kacissokho/bootcamp-project-update/blob/master/images/image-20250726-102559.png)**
+Push Docker Hub (artefact)
 
-### Docker Registry
-Deploy a private registry and store the built images in it.
-**![](https://github.com/kacissokho/bootcamp-project-update/blob/master/images/image-20250726-112448.png)**
+Push registry.heroku.com + release sur staging
 
-**![](https://github.com/kacissokho/bootcamp-project-update/blob/master/images/image-20250726-112540.png)**
+Smoke tests staging
 
-**![](https://github.com/kacissokho/bootcamp-project-update/blob/master/images/image-20250726-112321.png)**
+Promotion Heroku vers production (ou re-push)
 
-**![](https://github.com/kacissokho/bootcamp-project-update/blob/master/images/image-20250726-112223.png)**
-###  Infrastructure As Code
-Go to the directory where the docker-compose.yml is located. 
-Run the docker-compose: docker-compose up -d to start the service
+Slack : notification du résultat.
 
-**![](https://github.com/kacissokho/bootcamp-project-update/blob/master/images/image-20250726-113057.png)**
+Environnement & Outils
+Jenkins LTS (Pipeline), agents Docker par étape.
 
-**![](https://github.com/kacissokho/bootcamp-project-update/blob/master/images/image-20250726-115828.png)**
+Maven 3.9.x, JDK 17 (Spring Boot).
 
-### Access Website:
+SonarCloud (analyse SaaS).
 
-**![](https://github.com/kacissokho/bootcamp-project-update/blob/master/images/image-20250726-115951.png)**
+Docker & Docker Hub (stockage d’image).
 
-### Components:
-paymybuddy: Java application running on amazoncorretto:17-alpine
+Heroku CLI + Heroku Container Registry (2 apps : myapp-staging, myapp-prod).
 
-paymybuddydb: MySQL database server, Stores users, transactions, and account details
+Slack (plugin Jenkins ou webhook).
 
-### Networks
-paymybuddynetwork: bridge type
+GitHub Webhooks.
 
-### Volumes
-db_paymybuddy: Persistent volume used by MySQL to store database data.
+Étapes de la pipeline (toutes sous agent Docker)
+Tests automatisés
 
-### Environment Variables
-These variables are defined in the .env file:
+Exécuter tests unitaires et d’intégration (Surefire/Failsafe).
 
-SPRING_DATASOURCE_USERNAME: Username for the database connection
+Vérification de la qualité de code
 
-SPRING_DATASOURCE_PASSWORD: Password for the database connection
+SonarCloud : analyse statique + Quality Gate.
 
-SPRING_DATASOURCE_URL: JDBC URL for connecting to the MySQL database
+Compilation & Packaging
 
- #### Database Initialization:
-  
-The database schema is initialized using the initdb directory, which contains SQL scripts to set up    the required tables and initial data. 
+Build du JAR (Maven) → docker build de l’image,
 
+push sur Docker Hub (traçabilité),
+
+push sur registry.heroku.com/<app>/web (déploiement Heroku).
+
+Staging (Heroku)
+
+container:release sur myapp-staging,
+
+exécuter migrations si besoin, définir CONFIG VARS.
+
+Tests de validation de déploiement (smoke)
+
+Healthcheck /actuator/health, ping endpoints clés.
+
+Production (Heroku)
+
+Promotion staging → prod (atomique) ou re-push & release sur myapp-prod.
+
+Notification Slack
+
+Message récapitulatif (succès/échec, commit, lien run Jenkins).
