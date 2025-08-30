@@ -29,11 +29,9 @@ pipeline {
     /* ---- SonarCloud (sans withSonarQubeEnv), seulement sur master ---- */
     stage('SonarCloud analysis') {
   when {
-    anyOf {
-      branch 'master'
-      expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' }
-    }
+    anyOf { branch 'master'; expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
   }
+  options { timeout(time: 8, unit: 'MINUTES') } // évite les runs infinis
   agent {
     docker {
       image 'maven:3.9-eclipse-temurin-17'
@@ -41,20 +39,31 @@ pipeline {
     }
   }
   steps {
+    // Si SONAR_TOKEN n'est pas déjà défini en env global :
+    // withCredentials([string(credentialsId: 'sonar_token', variable: 'SONAR_TOKEN')]) { ... }
     sh '''
-      set -eux  # (pas de -o pipefail en /bin/sh)
+      set -eux
+      # (Facultatif) Vérif réseau pour éviter un faux "blocage"
+      apt-get update -y && apt-get install -y curl ca-certificates >/dev/null
+      curl -fsSL https://sonarcloud.io/api/system/status >/dev/null
+      curl -fsSL https://repo1.maven.org/maven2/ >/dev/null
 
-      # Build léger pour fournir les classes à l’analyse
-      mvn -B -DskipTests -s .m2/settings.xml verify
-
-      # Analyse SonarCloud sur master (ne bloque pas la pipeline)
-      mvn -B -s .m2/settings.xml sonar:sonar \
-        -Dsonar.host.url=https://sonarcloud.io \
-        -Dsonar.login="${SONAR_TOKEN}" \
-        -Dsonar.organization=kacissokho \
-        -Dsonar.projectKey=kacissokho_PayMyBuddy \
-        -Dsonar.branch.name=master || true
+      # Logs Maven plus verbeux sur les téléchargements
+      export MAVEN_OPTS="${MAVEN_OPTS:-} -Dorg.slf4j.simpleLogger.showDateTime=true -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=info"
     '''
+    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+      sh '''
+        set -eux
+        mvn -B -DskipTests -s .m2/settings.xml verify
+        mvn -B -s .m2/settings.xml sonar:sonar \
+          -Dsonar.host.url=https://sonarcloud.io \
+          -Dsonar.login="${SONAR_TOKEN}" \
+          -Dsonar.organization=kacissokho \
+          -Dsonar.projectKey=kacissokho_PayMyBuddy \
+          -Dsonar.branch.name=master \
+          -Dsonar.ws.timeout=60 || true
+      '''
+    }
   }
 }
 
