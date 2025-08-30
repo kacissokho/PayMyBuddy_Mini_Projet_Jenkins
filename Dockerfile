@@ -1,13 +1,5 @@
-# ---- build ----
-FROM maven:3.9-eclipse-temurin-17 AS build
-WORKDIR /src
-COPY pom.xml .
-RUN mvn -B -q -DskipTests dependency:go-offline
-COPY src ./src
-RUN mvn -B -DskipTests package
-
-# ---- runtime ----
-FROM eclipse-temurin:17-jre-jammy
+FROM amazoncorretto:17-alpine
 WORKDIR /app
-COPY --from=build /src/target/*jar /app/app.jar
-CMD ["sh", "-c", "java $JAVA_OPTS -Dserver.port=$PORT -jar /app/app.jar"]
+COPY target/paymybuddy.jar /app/paymybuddy.jar
+EXPOSE 8080
+CMD ["sh","-c","java -jar paymybuddy.jar --server.port=${PORT:-8080}"]
