@@ -24,41 +24,21 @@ pipeline {
       agent any
       steps { checkout scm }
     }
-
-    stage('Quality - SonarCloud') {
-      when {
-        anyOf {
-          branch 'master'
-          expression { env.GIT_BRANCH == 'origin/master' }
+ stage('SonarQube analysis') {
+            steps {
+                withSonarQubeEnv('SonarCloudServer') {
+                    sh 'mvn sonar:sonar -s .m2/settings.xml'
+                }
+            }
         }
-      }
-      agent {
-        docker {
-          image 'sonarsource/sonar-scanner-cli:latest'
-          args '-e SONAR_SCANNER_OPTS=-Xmx512m'
-        }
-      }
-      environment {
-        SONAR_TOKEN = credentials('sonar_token') // ID Jenkins Credential (Secret Text)
-      }
-      steps {
-        sh '''
-set -eu
-# Si le répertoire 'target' existe, on l'utilise pour l'analyse Java (sinon, on n'ajoute rien).
-EXTRA=""
-[ -d target ] && EXTRA="-Dsonar.java.binaries=target"
 
-sonar-scanner \
-  -Dsonar.host.url=https://sonarcloud.io \
-  -Dsonar.organization=kacissokho \
-  -Dsonar.projectKey=kacissokho_PayMyBuddy \
-  -Dsonar.sources=. \
-  -Dsonar.branch.name=master \
-  -Dsonar.login="${SONAR_TOKEN}" \
-  $EXTRA || true
-'''
-      }
-    }
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 60, unit: 'SECONDS') {
+                    waitForQualityGate abortPipeline: false
+                }
+            }
+        }
 
     stage('Build image') {
       agent any
@@ -115,7 +95,7 @@ ensure_db() {
   heroku config:set -a "$app" \
     SPRING_DATASOURCE_URL="jdbc:mysql://${host}/${db}?useSSL=false&serverTimezone=UTC" \
     SPRING_DATASOURCE_USERNAME="${user}" \
-    SPRING_DATASOURCE_PASSWORD="${pass}" >/devnull
+    SPRING_DATASOURCE_PASSWORD="${pass}" >/dev/null
 }
 
 ensure_db "$APP"
@@ -178,7 +158,7 @@ ensure_db() {
   heroku config:set -a "$app" \
     SPRING_DATASOURCE_URL="jdbc:mysql://${host}/${db}?useSSL=false&serverTimezone=UTC" \
     SPRING_DATASOURCE_USERNAME="${user}" \
-    SPRING_DATASOURCE_PASSWORD="${pass}" >/devnull
+    SPRING_DATASOURCE_PASSWORD="${pass}" >/dev/null
 }
 
 ensure_db "$APP"
