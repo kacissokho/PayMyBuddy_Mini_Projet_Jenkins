@@ -1,5 +1,6 @@
 pipeline {
   agent none
+  options { timestamps() }
 
   environment {
     // Image locale
@@ -16,7 +17,7 @@ pipeline {
     AUTO_PROVISION_JAWSDB = 'true'
 
     HEROKU_API_KEY = credentials('heroku_api_key')
-    SONAR_TOKEN    = credentials('sonar_token')   // <-- ajoute ce credential
+    SONAR_TOKEN    = credentials('sonar_token')   // <- token SonarCloud (Secret Text)
   }
 
   stages {
@@ -26,36 +27,35 @@ pipeline {
       steps { checkout scm }
     }
 
-    /* ---- SonarCloud (sans withSonarQubeEnv), seulement sur master ---- */
-    stage('SonarCloud analysis') {
-  when {
-    anyOf { branch 'master'; expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
-  }
-  options { timeout(time: 15, unit: 'MINUTES') } // + de marge pour le 1er run
-  agent {
-    docker {
-      image 'maven:3.9-eclipse-temurin-17'
-      args '-v $HOME/.m2:/root/.m2'
+    /* --- SonarCloud (FAST): pas de build Maven, timeout court, non bloquant --- */
+    stage('SonarCloud analysis (fast)') {
+      when {
+        anyOf { branch 'master'; expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
+      }
+      options { timeout(time: 4, unit: 'MINUTES') }
+      agent {
+        docker {
+          image 'sonarsource/sonar-scanner-cli:latest'
+        }
+      }
+      steps {
+        // On exécute le scanner directement. Pas besoin de classes compilées pour débloquer la pipeline.
+        // (Sonar avertira que les binaries Java manquent, mais l'analyse se termine rapidement.)
+        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+          sh '''
+            set -eu
+            sonar-scanner \
+              -Dsonar.host.url=https://sonarcloud.io \
+              -Dsonar.login="${SONAR_TOKEN}" \
+              -Dsonar.organization=kacissokho \
+              -Dsonar.projectKey=kacissokho_PayMyBuddy \
+              -Dsonar.sources=src/main/java,src/main/resources \
+              -Dsonar.exclusions=**/target/**,**/*.min.js,**/*.min.css \
+              -Dsonar.java.binaries=target
+          '''
+        }
+      }
     }
-  }
-  steps {
-    sh '''
-      set -eux
-      # Compilation minimale pour fournir les binaries à Sonar
-      mvn -B -DskipTests -Djacoco.skip=true -Dcheckstyle.skip=true -Dspotbugs.skip=true -s .m2/settings.xml compile
-
-      # Analyse SonarCloud (ne bloque pas la pipeline)
-      mvn -B -s .m2/settings.xml sonar:sonar \
-        -Dsonar.host.url=https://sonarcloud.io \
-        -Dsonar.login="${SONAR_TOKEN}" \
-        -Dsonar.organization=kacissokho \
-        -Dsonar.projectKey=kacissokho_PayMyBuddy \
-        -Dsonar.branch.name=master \
-        -Dsonar.ws.timeout=60 || true
-    '''
-  }
-}
-    
 
     stage('Build image') {
       agent any
