@@ -39,7 +39,7 @@ Le pipeline Jenkins est composé de plusieurs étapes automatisées permettant d
 **![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/CI_CD.png)**
 
 **Sur Heroku**:
-**![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/CI_CD.png)**
+**![](https://github.com/kacissokho/PayMyBuddy_Mini_Projet_Jenkins/blob/master/.m2/Heroku_dasbord.png)**
 
 
 ### 1. ✅ Checkout
