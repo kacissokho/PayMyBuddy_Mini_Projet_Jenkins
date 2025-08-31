@@ -48,11 +48,17 @@ Construit l’image Docker de l’application, nécessaire pour le déploiement 
 ### 3. 🚀 Heroku: déployer STAGING
 Déploie automatiquement l’image construite sur l’environnement **STAGING** de Heroku (préproduction).  
 
+**![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/CI_CD.png)**
+
+
 ### 4. 🧪 Test STAGING
 Exécute les tests automatisés sur l’environnement **STAGING** afin de vérifier le bon fonctionnement de l’application avant de passer en production.  
 
 ### 5. 🚀 Heroku: déployer PROD
 Déploie l’application sur l’environnement **PRODUCTION** de Heroku si toutes les étapes précédentes se sont bien déroulées.  
+
+**![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/CI_CD.png)**
+
 
 ### 6. 🔍 Test Production
 Exécute un test simple sur l’environnement de **production** (ex. un `curl` pour vérifier l’accessibilité de l’application en ligne).  
