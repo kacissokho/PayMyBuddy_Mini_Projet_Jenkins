@@ -38,7 +38,7 @@ Concevoir une pipeline **CI/CD Jenkins** qui :
                 **A-La Partie CI:**
 Les Etapes de la CD validées:
 
-![branche_master_1](/https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/CI_CD.png)
+**![](https://github.com/kacissokho/bootcamp-project-update/blob/master/images/image-20250726-102559.png)**
 
 ### 1) Tests automatisés
 - Exécuter **tests unitaires** et **tests d’intégration** *(Surefire/Failsafe)*.
