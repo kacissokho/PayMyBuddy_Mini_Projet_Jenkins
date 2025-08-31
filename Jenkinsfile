@@ -17,7 +17,7 @@ pipeline {
     AUTO_PROVISION_JAWSDB = 'true'
 
     HEROKU_API_KEY = credentials('heroku_api_key')
-    SONAR_TOKEN    = credentials('sonar_token')   // <- token SonarCloud (Secret Text)
+    SONAR_TOKEN    = credentials('sonar_token')
   }
 
   stages {
@@ -27,20 +27,32 @@ pipeline {
       steps { checkout scm }
     }
 
-    /* --- SonarCloud (FAST): pas de build Maven, timeout court, non bloquant --- */
+    /* --- Tests unitaires --- */
+    stage('Test') {
+      agent {
+        docker {
+          image 'maven:3.9-eclipse-temurin-17'
+          args '-v $HOME/.m2:/root/.m2'
+        }
+      }
+      steps {
+        sh 'mvn clean test'
+      }
+      post {
+        always {
+          junit 'target/surefire-reports/*.xml'
+        }
+      }
+    }
+
+    /* --- SonarCloud (FAST) : non bloquant --- */
     stage('SonarCloud analysis (fast)') {
       when {
         anyOf { branch 'master'; expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
       }
       options { timeout(time: 4, unit: 'MINUTES') }
-      agent {
-        docker {
-          image 'sonarsource/sonar-scanner-cli:latest'
-        }
-      }
+      agent { docker { image 'sonarsource/sonar-scanner-cli:latest' } }
       steps {
-        // On exécute le scanner directement. Pas besoin de classes compilées pour débloquer la pipeline.
-        // (Sonar avertira que les binaries Java manquent, mais l'analyse se termine rapidement.)
         catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
           sh '''
             set -eu
@@ -64,6 +76,7 @@ pipeline {
       }
     }
 
+    /* =================== STAGING =================== */
     stage('Heroku: préparer & déployer STAGING') {
       when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
       agent any
@@ -127,6 +140,25 @@ heroku releases -a "$APP" | head -n 5
       }
     }
 
+    stage('Test STAGING (HTTP 200)') {
+      when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
+      agent { docker { image 'curlimages/curl:8.8.0' } }
+      steps {
+        sh '''
+          set -eu
+          URL="https://paymybuddy-staging-ce7845d0d0a8.herokuapp.com/"
+          echo "Attente de stabilisation…"; sleep 30
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" -L --retry 10 --retry-delay 3 "$URL")
+          if [ "$CODE" -ne 200 ]; then
+            echo "❌ STAGING: attendu 200, reçu $CODE pour $URL"
+            exit 1
+          fi
+          echo "✅ STAGING OK (200) : $URL"
+        '''
+      }
+    }
+
+    /* =================== PRODUCTION =================== */
     stage('Heroku: préparer & déployer PROD') {
       when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
       agent any
@@ -187,6 +219,24 @@ heroku container:release -a "$APP" web
 heroku ps:scale web=1 -a "$APP" || true
 heroku releases -a "$APP" | head -n 5
 '''
+      }
+    }
+
+    stage('Test PROD (HTTP 200)') {
+      when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
+      agent { docker { image 'curlimages/curl:8.8.0' } }
+      steps {
+        sh '''
+          set -eu
+          URL="https://paymybuddy-production-97c4996ae192.herokuapp.com/"
+          echo "Attente de stabilisation…"; sleep 30
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" -L --retry 10 --retry-delay 3 "$URL")
+          if [ "$CODE" -ne 200 ]; then
+            echo "❌ PROD: attendu 200, reçu $CODE pour $URL"
+            exit 1
+          fi
+          echo "✅ PROD OK (200) : $URL"
+        '''
       }
     }
   }
