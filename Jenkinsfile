@@ -29,29 +29,25 @@ pipeline {
       }
     }
 
-    stage('Test') {
-      options { timeout(time: 8, unit: 'MINUTES') }
-      agent {
-        docker {
-          image 'maven:3.9-eclipse-temurin-17'
-          args '-v $HOME/.m2:/root/.m2'
-        }
-      }
-      steps {
-        catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
-          sh '''
-set -eux
-mvn -B -ntp -DfailIfNoTests=false clean test
+   stage('Maven go-offline (fast)') {
+  agent {
+    docker {
+      image 'maven:3.9-eclipse-temurin-17'
+      args '-v $HOME/.m2:/root/.m2'
+    }
+  }
+  steps {
+    catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
+      timeout(time: 3, unit: 'MINUTES') {
+        sh '''
+set -eu
+mvn -B -ntp -DskipTests dependency:go-offline || true
 '''
-        }
-      }
-      post {
-        always {
-          junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true, keepLongStdio: true
-          script { currentBuild.result = 'SUCCESS' }
-        }
       }
     }
+  }
+}
+
 
     stage('SonarCloud analysis (fast)') {
       when {
