@@ -33,7 +33,12 @@ Concevoir une pipeline **CI/CD Jenkins** qui :
 
 ---
 
-## 🏗️ Étapes de la pipeline **
+## Étapes de la Pipeline CI/CD
+
+                **A-La Partie CI:**
+Les Etapes de la CD validées:
+
+![branche_master_1](/uploads/c400ddfecd05794b351b536167541009/branche_master_1.png)
 
 ### 1) Tests automatisés
 - Exécuter **tests unitaires** et **tests d’intégration** *(Surefire/Failsafe)*.
