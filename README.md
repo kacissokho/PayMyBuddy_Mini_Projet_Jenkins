@@ -40,26 +40,27 @@ Les Etapes de la CD validées:
 
 **![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/CI_CD.png)**
 
-### 1) Tests automatisés
-- Exécuter **tests unitaires** et **tests d’intégration** *(Surefire/Failsafe)*.
+## 🔄 Pipeline CI/CD – PayMyBuddy
 
-### 2) Vérification de la qualité de code
-- **SonarCloud** : analyse statique + **Quality Gate**.
+Le pipeline Jenkins est composé de plusieurs étapes automatisées permettant de **construire, tester et déployer** l’application sur **Heroku**.  
 
-### 3) Compilation & Packaging
-- **Build du JAR** *(Maven)* → **docker build** de l’image  
-- **Push** sur **Docker Hub** *(traçabilité)*  
-- **Push** sur `registry.heroku.com/<app>/web` *(déploiement Heroku)*
+### 1. ✅ Checkout
+Récupère le code source depuis le dépôt Git afin d’avoir la dernière version du projet.  
 
-### 4) Staging (Heroku)
-- `container:release` sur **`myapp-staging`**  
-- Exécuter **migrations** si besoin, définir **CONFIG VARS**
+### 2. 🏗️ Build image
+Construit l’image Docker de l’application, nécessaire pour le déploiement et les tests.  
 
-### 5) Tests de validation de déploiement (smoke)
-- Healthcheck **`/actuator/health`**, ping des endpoints clés
+### 3. 🚀 Heroku: déployer STAGING
+Déploie automatiquement l’image construite sur l’environnement **STAGING** de Heroku (préproduction).  
 
-### 6) Production (Heroku)
-- **Promotion** *staging → prod* *(atomique)* **ou** re-push & release sur **`myapp-prod`**
+### 4. 🧪 Test STAGING
+Exécute les tests automatisés sur l’environnement **STAGING** afin de vérifier le bon fonctionnement de l’application avant de passer en production.  
 
-### 7) Notification Slack
-- Message récapitulatif (**succès/échec**, **commit**, **lien du run Jenkins**)
+### 5. 🚀 Heroku: déployer PROD
+Déploie l’application sur l’environnement **PRODUCTION** de Heroku si toutes les étapes précédentes se sont bien déroulées.  
+
+### 6. 🔍 Test Production
+Exécute un test simple sur l’environnement de **production** (ex. un `curl` pour vérifier l’accessibilité de l’application en ligne).  
+
+### 7. 🏁 End
+Marque la fin du pipeline.  
