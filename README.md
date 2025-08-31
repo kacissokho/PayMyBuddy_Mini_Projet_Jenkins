@@ -64,4 +64,4 @@ Déploie l’application sur l’environnement **PRODUCTION** de Heroku si toute
 Exécute un test simple sur l’environnement de **production** (ex. un `curl` pour vérifier l’accessibilité de l’application en ligne).  
 
 ### 7. Slack Notification
-**![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/paymybuddy-production.png)**
+**![](https://github.com/kacissokho/PayMyBuddy_Mini_Projet_Jenkins/blob/master/.m2/Slack_Notif.png)**
