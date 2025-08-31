@@ -57,7 +57,7 @@ Exécute les tests automatisés sur l’environnement **STAGING** afin de vérif
 ### 5. 🚀 Heroku: déployer PROD
 Déploie l’application sur l’environnement **PRODUCTION** de Heroku si toutes les étapes précédentes se sont bien déroulées.  
 
-**![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/CI_CD.png)**
+**![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/paymybuddy-production.png)**
 
 
 ### 6. 🔍 Test Production
