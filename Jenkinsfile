@@ -76,25 +76,15 @@ heroku releases -a "$APP" | head -n 5
 '''
       }
     }
-    stage('Test STAGING (HTTP 200)') {
-      when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
-      options { timeout(time: 3, unit: 'MINUTES') }
-      agent { docker { image 'curlimages/curl:8.8.0' } }
-      steps {
-        sh '''
-set -eu
-URL="https://paymybuddy-staging-ce7845d0d0a8.herokuapp.com/"
-echo "Attente de stabilisation..."
-sleep 30
-CODE=$(curl -s -o /dev/null -w "%{http_code}" -L --retry 10 --retry-delay 3 "$URL")
-if [ "$CODE" -ne 200 ]; then
-  echo "STAGING: attendu 200, recu $CODE pour $URL"
-  exit 1
-fi
-echo "STAGING OK (200): $URL"
-'''
-      }
-    }
+    stage('Test STAGING (simple)') {
+  when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
+  options { timeout(time: 2, unit: 'MINUTES') }
+  agent { docker { image 'curlimages/curl:8.8.0' } }
+  steps {
+    sh 'curl -fsSL -o /dev/null -L  https://paymybuddy-staging-f24fd6eba824.herokuapp.com/login'
+  }
+}
+
     stage('Heroku: préparer & déployer PROD') {
       when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
       agent any
