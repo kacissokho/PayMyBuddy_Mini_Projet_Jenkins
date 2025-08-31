@@ -148,6 +148,12 @@ stage('Test Production') {
   }
 
   post {
-    always { echo 'Pipeline terminé.' }
+  success {
+    slackSend channel: 'C09CTBMC74N', message: "✅ ${env.JOB_NAME} #${env.BUILD_NUMBER} OK"
   }
+  failure {
+    slackSend channel: 'C09CTBMC74N', message: "❌ ${env.JOB_NAME} #${env.BUILD_NUMBER} FAILED"
+  }
+}
+
 }
