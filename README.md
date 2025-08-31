@@ -48,7 +48,7 @@ Construit l’image Docker de l’application, nécessaire pour le déploiement 
 ### 3. 🚀 Heroku: déployer STAGING
 Déploie automatiquement l’image construite sur l’environnement **STAGING** de Heroku (préproduction).  
 
-**![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/CI_CD.png)**
+**![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/paymybuddy-staging.png)**
 
 
 ### 4. 🧪 Test STAGING
