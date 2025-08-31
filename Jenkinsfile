@@ -149,10 +149,10 @@ stage('Test Production') {
 
   post {
   success {
-    slackSend channel: 'C09CTBMC74N', message: "✅ ${env.JOB_NAME} #${env.BUILD_NUMBER} OK"
+    slackSend channel: 'C09CTBMC74N', message: "SUCCES CISKO ${env.JOB_NAME} #${env.BUILD_NUMBER}"
   }
   failure {
-    slackSend channel: 'C09CTBMC74N', message: "❌ ${env.JOB_NAME} #${env.BUILD_NUMBER} FAILED"
+    slackSend channel: 'C09CTBMC74N', message: "FAILLED ${env.JOB_NAME} #${env.BUILD_NUMBER}"
   }
 }
 
