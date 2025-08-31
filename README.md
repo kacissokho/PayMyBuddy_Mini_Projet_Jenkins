@@ -63,5 +63,5 @@ Déploie l’application sur l’environnement **PRODUCTION** de Heroku si toute
 ### 6. 🔍 Test Production
 Exécute un test simple sur l’environnement de **production** (ex. un `curl` pour vérifier l’accessibilité de l’application en ligne).  
 
-### 7. 🏁 End
-Marque la fin du pipeline.  
+### 7. Slack Notification
+**![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/paymybuddy-production.png)**
