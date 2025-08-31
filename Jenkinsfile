@@ -24,7 +24,7 @@ pipeline {
         sh 'docker build -t ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} .'
       }
     }
-    stage('Heroku: préparer & déployer STAGING') {
+    stage('Heroku:déployer STAGING') {
       when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
       agent any
       steps {
@@ -76,7 +76,7 @@ heroku releases -a "$APP" | head -n 5
 '''
       }
     }
-    stage('Test STAGING (simple)') {
+    stage('Test STAGING') {
   when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
   options { timeout(time: 2, unit: 'MINUTES') }
   agent { docker { image 'curlimages/curl:8.8.0' } }
@@ -85,7 +85,7 @@ heroku releases -a "$APP" | head -n 5
   }
 }
 
-    stage('Heroku: préparer & déployer PROD') {
+    stage('Heroku: déployer PROD') {
       when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
       agent any
       steps {
@@ -138,6 +138,15 @@ heroku releases -a "$APP" | head -n 5
       }
     }
   }
+
+stage('Test Production') {
+  when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
+  options { timeout(time: 2, unit: 'MINUTES') }
+  agent { docker { image 'curlimages/curl:8.8.0' } }
+  steps {
+    sh 'curl -fsSL -o /dev/null -L   https://paymybuddy-production-ced0cd4b464f.herokuapp.com/login'
+  }
+}
   post {
     always { echo 'Pipeline terminé.' }
   }
