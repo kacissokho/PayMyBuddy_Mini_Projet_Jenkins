@@ -27,7 +27,7 @@ Flux : GitHub (push/PR) → Webhook → Jenkins → Docker/Heroku
 - Jenkins LTS (Pipeline), agents Docker par étape  
 - Maven 3.9.x, JDK 17 (Spring Boot)  
 - Docker (construction d’images locales)  
-- Heroku CLI + Heroku Container Registry (2 apps : `myapp-staging`, `myapp-prod`)  
+- Heroku CLI + Heroku Container Registry (2 apps : `paymybuddy-staging`, `paymybuddy-production`)  
 - GitHub Webhooks (déclenchement automatique des builds)  
 
 
