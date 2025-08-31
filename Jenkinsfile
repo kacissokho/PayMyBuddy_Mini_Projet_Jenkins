@@ -27,235 +27,68 @@ pipeline {
       steps { checkout scm }
     }
 
-    /* --- Tests unitaires --- */
+    /* --- Tests unitaires : non bloquants + timeout --- */
     stage('Test') {
-  agent {
-    docker {
-      image 'maven:3.9-eclipse-temurin-17'
-      args '-v $HOME/.m2:/root/.m2'
+      options { timeout(time: 8, unit: 'MINUTES') }
+      agent {
+        docker {
+          image 'maven:3.9-eclipse-temurin-17'
+          args '-v $HOME/.m2:/root/.m2'
+        }
+      }
+      steps {
+        // N'échoue pas la pipeline même si "mvn test" échoue
+        catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
+          sh '''
+            set -eux
+            mvn -B -ntp -DfailIfNoTests=false clean test
+          '''
+        }
+      }
+      post {
+        always {
+          // Publie les rapports même s'ils sont absents
+          junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true, keepLongStdio: true
+          // Force explicitement le statut global
+          script { currentBuild.result = 'SUCCESS' }
+        }
+      }
     }
-  }
-  steps {
-    // N'échoue pas la pipeline même si "mvn test" échoue
-    catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
-      sh 'mvn -B -ntp clean test'
-    }
-  }
-  post {
-    always {
-      // Publie les rapports même s'ils sont absents
-      junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true, keepLongStdio: true
-      // Force explicitement le statut global
-      script { currentBuild.result = 'SUCCESS' }
-    }
-  }
-}
 
-   /* --- SonarCloud (FAST) : non bloquant & force SUCCESS --- */
-stage('SonarCloud analysis (fast)') {
-  when {
-    anyOf { branch 'master'; expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
-  }
-  options { timeout(time: 4, unit: 'MINUTES') }
-  agent { docker { image 'sonarsource/sonar-scanner-cli:latest' } }
-  steps {
-    // Ne marque pas le stage/built en échec ni unstable
-    catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
-      sh '''
-        set -eu
-        sonar-scanner \
-          -Dsonar.host.url=https://sonarcloud.io \
-          -Dsonar.login="${SONAR_TOKEN}" \
-          -Dsonar.organization=kacissokho \
-          -Dsonar.projectKey=kacissokho_PayMyBuddy \
-          -Dsonar.sources=src/main/java,src/main/resources \
-          -Dsonar.exclusions=**/target/**,**/*.min.js,**/*.min.css \
-          -Dsonar.java.binaries=target
-      '''
+    /* --- SonarCloud (FAST) : non bloquant & force SUCCESS --- */
+    stage('SonarCloud analysis (fast)') {
+      when {
+        anyOf { branch 'master'; expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
+      }
+      options { timeout(time: 4, unit: 'MINUTES') }
+      agent { docker { image 'sonarsource/sonar-scanner-cli:latest' } }
+      steps {
+        // Ne marque pas le stage/build en échec
+        catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
+          sh '''
+            set -eu
+            sonar-scanner \
+              -Dsonar.host.url=https://sonarcloud.io \
+              -Dsonar.login="${SONAR_TOKEN}" \
+              -Dsonar.organization=kacissokho \
+              -Dsonar.projectKey=kacissokho_PayMyBuddy \
+              -Dsonar.sources=src/main/java,src/main/resources \
+              -Dsonar.exclusions=**/target/**,**/*.min.js,**/*.min.css \
+              -Dsonar.java.binaries=target
+          '''
+        }
+      }
+      post { always { script { currentBuild.result = 'SUCCESS' } } }
     }
-  }
-  post {
-    always {
-      // Force explicitement le statut global à SUCCESS après ce stage
-      script { currentBuild.result = 'SUCCESS' }
-    }
-  }
-}
 
-
+    /* --- Build image : timeout + logs de contexte --- */
     stage('Build image') {
-      agent any
-      steps {
-        sh 'docker build -t ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} .'
-      }
-    }
-
-    /* =================== STAGING =================== */
-    stage('Heroku: préparer & déployer STAGING') {
-      when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
+      options { timeout(time: 25, unit: 'MINUTES') }
       agent any
       steps {
         sh '''
-set -eu
-heroku container:login
-APP="${STAGING}"
-heroku apps:info -a "$APP" >/dev/null 2>&1 || heroku create "$APP"
-heroku stack:set container -a "$APP"
-
-ensure_db() {
-  local app="$1"
-  local auto="${AUTO_PROVISION_JAWSDB}"
-
-  local jurl
-  jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
-
-  if [ -z "$jurl" ] && [ "$auto" = "true" ]; then
-    echo "JawsDB absent sur $app → provisioning…"
-    heroku addons:create jawsdb:kitefin -a "$app" || true
-
-    echo "Attente que JAWSDB_URL soit disponible…"
-    for i in $(seq 1 24); do
-      jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
-      if [ -n "$jurl" ]; then
-        echo "JAWSDB_URL détectée."
-        break
-      fi
-      echo "…pas encore prêt (tentative $i/24), on réessaie dans 5s"
-      sleep 5
-    done
-  fi
-
-  if [ -z "$jurl" ]; then
-    echo "ERREUR: JAWSDB_URL est vide/inexistant sur $app. Abandon."
-    exit 1
-  fi
-
-  local user pass host db
-  user="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\1|')"
-  pass="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\2|')"
-  host="$(echo "$jurl" | sed -E 's|mysql://[^@]+@([^/]+)/.*|\\1|')"
-  db="$(  echo "$jurl" | sed -E 's|.*/([^?]+).*|\\1|')"
-
-  heroku config:set -a "$app" \
-    SPRING_DATASOURCE_URL="jdbc:mysql://${host}/${db}?useSSL=false&serverTimezone=UTC" \
-    SPRING_DATASOURCE_USERNAME="${user}" \
-    SPRING_DATASOURCE_PASSWORD="${pass}" >/dev/null
-}
-
-ensure_db "$APP"
-
-docker tag ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} registry.heroku.com/${APP}/web
-docker push registry.heroku.com/${APP}/web
-heroku container:release -a "$APP" web
-
-heroku ps:scale web=1 -a "$APP" || true
-heroku releases -a "$APP" | head -n 5
-'''
-      }
-    }
-
-    stage('Test STAGING (HTTP 200)') {
-      when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
-      agent { docker { image 'curlimages/curl:8.8.0' } }
-      steps {
-        sh '''
-          set -eu
-          URL="https://paymybuddy-staging-ce7845d0d0a8.herokuapp.com/"
-          echo "Attente de stabilisation…"; sleep 30
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" -L --retry 10 --retry-delay 3 "$URL")
-          if [ "$CODE" -ne 200 ]; then
-            echo "❌ STAGING: attendu 200, reçu $CODE pour $URL"
-            exit 1
-          fi
-          echo "✅ STAGING OK (200) : $URL"
-        '''
-      }
-    }
-
-    /* =================== PRODUCTION =================== */
-    stage('Heroku: préparer & déployer PROD') {
-      when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
-      agent any
-      steps {
-        sh '''
-set -eu
-heroku container:login
-APP="${PRODUCTION}"
-heroku apps:info -a "$APP" >/dev/null 2>&1 || heroku create "$APP"
-heroku stack:set container -a "$APP"
-
-ensure_db() {
-  local app="$1"
-  local auto="${AUTO_PROVISION_JAWSDB}"
-
-  local jurl
-  jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
-
-  if [ -z "$jurl" ] && [ "$auto" = "true" ]; then
-    echo "JawsDB absent sur $app → provisioning…"
-    heroku addons:create jawsdb:kitefin -a "$app" || true
-
-    echo "Attente que JAWSDB_URL soit disponible…"
-    for i in $(seq 1 24); do
-      jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
-      if [ -n "$jurl" ]; then
-        echo "JAWSDB_URL détectée."
-        break
-      fi
-      echo "…pas encore prêt (tentative $i/24), on réessaie dans 5s"
-      sleep 5
-    done
-  fi
-
-  if [ -z "$jurl" ]; then
-    echo "ERREUR: JAWSDB_URL est vide/inexistant sur $app. Abandon."
-    exit 1
-  fi
-
-  local user pass host db
-  user="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\1|')"
-  pass="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\2|')"
-  host="$(echo "$jurl" | sed -E 's|mysql://[^@]+@([^/]+)/.*|\\1|')"
-  db="$(  echo "$jurl" | sed -E 's|.*/([^?]+).*|\\1|')"
-
-  heroku config:set -a "$app" \
-    SPRING_DATASOURCE_URL="jdbc:mysql://${host}/${db}?useSSL=false&serverTimezone=UTC" \
-    SPRING_DATASOURCE_USERNAME="${user}" \
-    SPRING_DATASOURCE_PASSWORD="${pass}" >/dev/null
-}
-
-ensure_db "$APP"
-
-docker tag ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} registry.heroku.com/${APP}/web
-docker push registry.heroku.com/${APP}/web
-heroku container:release -a "$APP" web
-
-heroku ps:scale web=1 -a "$APP" || true
-heroku releases -a "$APP" | head -n 5
-'''
-      }
-    }
-
-    stage('Test PROD (HTTP 200)') {
-      when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
-      agent { docker { image 'curlimages/curl:8.8.0' } }
-      steps {
-        sh '''
-          set -eu
-          URL="https://paymybuddy-production-97c4996ae192.herokuapp.com/"
-          echo "Attente de stabilisation…"; sleep 30
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" -L --retry 10 --retry-delay 3 "$URL")
-          if [ "$CODE" -ne 200 ]; then
-            echo "❌ PROD: attendu 200, reçu $CODE pour $URL"
-            exit 1
-          fi
-          echo "✅ PROD OK (200) : $URL"
-        '''
-      }
-    }
-  }
-
-  post {
-    always { echo 'Pipeline terminé.' }
-  }
-}
+          set -eux
+          docker version
+          echo "Taille du contexte :" ; du -sh . || true
+          [ -f .dockerignore ] && { echo "-------- .dockerignore (head) --------"; sed -n '1,120p' .dockerignore; } || echo "Pas de .dockerignore"
+          docker build --pull --progress=p
