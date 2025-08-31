@@ -1,35 +1,35 @@
-# CI/CD Spring Boot → Heroku (Jenkins + Docker + SonarCloud)
+# CI/CD Spring Boot → Heroku
 
-## 🎯 Objectif
-Concevoir une pipeline **CI/CD Jenkins** qui :
-- garantit la **qualité & sécurité** du code *(tests + SonarCloud)* ;
-- **package** l’application *(image Docker)* et **publie** l’image sur **Docker Hub** *(traçabilité/artefact)* ;
-- **déploie automatiquement** sur **Heroku** (*staging* puis *production* via promotion) ;
-- **notifie** l’équipe sur **Slack** du **statut final**.
+🎯 Objectif  
+Concevoir une pipeline CI/CD Jenkins qui :  
 
----
-
-## 🧭 Architecture d’exécution (vue d’ensemble)
-**Flux** : **GitHub (push/PR)** → **Webhook** → **Jenkins** → **Docker/Heroku** → **Slack**
-
-**Détails côté Jenkins (agents Docker)** :
-- **Build JAR → docker build → tag**  
-- **Push Docker Hub** *(artefact)*  
-- **Push** `registry.heroku.com` **+ release** sur **staging**  
-- **Smoke tests** **staging**  
-- **Promotion** Heroku vers **production** *(ou re-push)*  
-- **Slack** : notification du résultat
+- récupère automatiquement le code source depuis GitHub ;  
+- construit l’image Docker de l’application ;  
+- déploie automatiquement sur **Heroku** (staging puis production) ;  
+- exécute des tests de validation sur **STAGING** et **PRODUCTION** pour garantir la disponibilité.  
 
 ---
 
-## 🧰 Environnement & Outils
-- **Jenkins LTS** (Pipeline), **agents Docker** par étape  
-- **Maven 3.9.x**, **JDK 17** (Spring Boot)  
-- **SonarCloud** (analyse SaaS)  
-- **Docker & Docker Hub** (stockage d’image)  
-- **Heroku CLI** + **Heroku Container Registry** *(2 apps : `myapp-staging`, `myapp-prod`)*  
-- **Slack** (plugin Jenkins ou **webhook**)  
-- **GitHub Webhooks**
+🧭 Architecture d’exécution (vue d’ensemble)  
+Flux : GitHub (push/PR) → Webhook → Jenkins → Docker/Heroku  
+
+**Détails côté Jenkins (agents Docker) :**  
+1. **Checkout** → récupération du code source depuis GitHub  
+2. **Build image** → construction de l’image Docker  
+3. **Heroku: deploy STAGING** → push de l’image et release sur Heroku STAGING  
+4. **Test STAGING** → exécution des tests fonctionnels (smoke tests) sur STAGING  
+5. **Heroku: deploy PROD** → promotion/déploiement vers Heroku PRODUCTION  
+6. **Test Production** → test basique (`curl`) pour vérifier l’accessibilité de l’application en ligne  
+
+---
+
+🧰 Environnement & Outils  
+- Jenkins LTS (Pipeline), agents Docker par étape  
+- Maven 3.9.x, JDK 17 (Spring Boot)  
+- Docker (construction d’images locales)  
+- Heroku CLI + Heroku Container Registry (2 apps : `myapp-staging`, `myapp-prod`)  
+- GitHub Webhooks (déclenchement automatique des builds)  
+
 
 
 ## 🔄 Pipeline CI/CD – PayMyBuddy
