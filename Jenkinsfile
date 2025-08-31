@@ -137,8 +137,6 @@ heroku releases -a "$APP" | head -n 5
 '''
       }
     }
-  }
-
 stage('Test Production') {
   when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
   options { timeout(time: 2, unit: 'MINUTES') }
@@ -147,6 +145,8 @@ stage('Test Production') {
     sh 'curl -fsSL -o /dev/null -L   https://paymybuddy-production-ced0cd4b464f.herokuapp.com/login'
   }
 }
+  }
+
   post {
     always { echo 'Pipeline terminé.' }
   }
