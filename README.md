@@ -31,18 +31,13 @@ Concevoir une pipeline **CI/CD Jenkins** qui :
 - **Slack** (plugin Jenkins ou **webhook**)  
 - **GitHub Webhooks**
 
----
-
-## Étapes de la Pipeline CI/CD
-
-                **A-La Partie CI:**
-Les Etapes de la CD validées:
-
-**![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/CI_CD.png)**
 
 ## 🔄 Pipeline CI/CD – PayMyBuddy
 
 Le pipeline Jenkins est composé de plusieurs étapes automatisées permettant de **construire, tester et déployer** l’application sur **Heroku**.  
+
+**![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/CI_CD.png)**
+
 
 ### 1. ✅ Checkout
 Récupère le code source depuis le dépôt Git afin d’avoir la dernière version du projet.  
