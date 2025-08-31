@@ -1,5 +1,6 @@
 pipeline {
   agent none
+
   options { timestamps() }
 
   environment {
@@ -17,16 +18,14 @@ pipeline {
     AUTO_PROVISION_JAWSDB = 'true'
 
     HEROKU_API_KEY = credentials('heroku_api_key')
-    SONAR_TOKEN    = credentials('sonar_token')
+    SONAR_TOKEN    = credentials('sonar_token') // <- ajoute ce secret côté Jenkins si pas déjà fait
   }
 
   stages {
 
     stage('Checkout') {
       agent any
-      steps {
-        checkout scm
-      }
+      steps { checkout scm }
     }
 
     /* --- Tests unitaires : non bloquants + timeout --- */
@@ -39,22 +38,20 @@ pipeline {
         }
       }
       steps {
+        // N'échoue pas la pipeline même si "mvn test" échoue
         catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
-          sh '''
-            set -eux
-            mvn -B -ntp -DfailIfNoTests=false clean test
-          '''
+          sh 'set -eux; mvn -B -ntp -DfailIfNoTests=false clean test'
         }
       }
       post {
         always {
           junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true, keepLongStdio: true
-          script { currentBuild.result = 'SUCCESS' }
+          script { currentBuild.result = 'SUCCESS' } // force SUCCESS global après les tests
         }
       }
     }
 
-    /* --- SonarCloud (FAST) : non bloquant & force SUCCESS --- */
+    /* --- SonarCloud (FAST) : non bloquant & force SUCCESS (master only) --- */
     stage('SonarCloud analysis (fast)') {
       when {
         anyOf { branch 'master'; expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
@@ -76,26 +73,15 @@ pipeline {
           '''
         }
       }
-      post {
-        always { script { currentBuild.result = 'SUCCESS' } }
-      }
+      post { always { script { currentBuild.result = 'SUCCESS' } } }
     }
 
-    /* --- Build image : timeout + logs de contexte --- */
     stage('Build image') {
       options { timeout(time: 25, unit: 'MINUTES') }
       agent any
       steps {
         sh '''
           set -eux
-          docker version
-          echo "Taille du contexte :" ; du -sh . || true
-          if [ -f .dockerignore ]; then
-            echo "-------- .dockerignore (head) --------"
-            sed -n '1,120p' .dockerignore
-          else
-            echo "Pas de .dockerignore"
-          fi
           docker build --pull --progress=plain -t ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} .
         '''
       }
@@ -109,153 +95,4 @@ pipeline {
       steps {
         sh '''
 set -eux
-
-# Login Heroku non interactif + fallback docker login si besoin
-heroku container:login || (echo "$HEROKU_API_KEY" | docker login --username=_ --password-stdin registry.heroku.com)
-
-APP="${STAGING}"
-heroku apps:info -a "$APP" >/dev/null 2>&1 || heroku create "$APP"
-heroku stack:set container -a "$APP"
-
-ensure_db() {
-  local app="$1"
-  local auto="${AUTO_PROVISION_JAWSDB}"
-  local jurl
-  jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
-
-  if [ -z "$jurl" ] && [ "$auto" = "true" ]; then
-    ( heroku addons:create jawsdb:kitefin -a "$app" || true ) &
-    for i in $(seq 1 24); do
-      jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
-      [ -n "$jurl" ] && break
-      sleep 5
-    done
-  fi
-
-  if [ -z "$jurl" ]; then
-    echo "⚠️  JAWSDB_URL absente ; on continue (non bloquant)."
-  else
-    local user pass host db
-    user="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\1|')"
-    pass="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\2|')"
-    host="$(echo "$jurl" | sed -E 's|mysql://[^@]+@([^/]+)/.*|\\1|')"
-    db="$(  echo "$jurl" | sed -E 's|.*/([^?]+).*|\\1|')"
-
-    heroku config:set -a "$app" \
-      SPRING_DATASOURCE_URL="jdbc:mysql://${host}/${db}?useSSL=false&serverTimezone=UTC" \
-      SPRING_DATASOURCE_USERNAME="${user}" \
-      SPRING_DATASOURCE_PASSWORD="${pass}" >/dev/null
-  fi
-}
-
-ensure_db "$APP"
-
-docker tag ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} registry.heroku.com/${APP}/web
-docker push registry.heroku.com/${APP}/web
-heroku container:release -a "$APP" web
-
-heroku ps:scale web=1 -a "$APP" || true
-heroku releases -a "$APP" | head -n 5
-        '''
-      }
-    }
-
-    stage('Test STAGING (HTTP 200)') {
-      when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
-      options { timeout(time: 3, unit: 'MINUTES') }
-      agent { docker { image 'curlimages/curl:8.8.0' } }
-      steps {
-        sh '''
-          set -eu
-          URL="https://paymybuddy-staging-ce7845d0d0a8.herokuapp.com/"
-          echo "Attente de stabilisation…"; sleep 30
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" -L --retry 10 --retry-delay 3 "$URL")
-          if [ "$CODE" -ne 200 ]; then
-            echo "❌ STAGING: attendu 200, reçu $CODE pour $URL"
-            exit 1
-          fi
-          echo "✅ STAGING OK (200) : $URL"
-        '''
-      }
-    }
-
-    /* =================== PRODUCTION =================== */
-    stage('Heroku: préparer & déployer PROD') {
-      when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
-      options { timeout(time: 20, unit: 'MINUTES') }
-      agent any
-      steps {
-        sh '''
-set -eux
-
-heroku container:login || (echo "$HEROKU_API_KEY" | docker login --username=_ --password-stdin registry.heroku.com)
-
-APP="${PRODUCTION}"
-heroku apps:info -a "$APP" >/dev/null 2>&1 || heroku create "$APP"
-heroku stack:set container -a "$APP"
-
-ensure_db() {
-  local app="$1"
-  local auto="${AUTO_PROVISION_JAWSDB}"
-  local jurl
-  jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
-  if [ -z "$jurl" ] && [ "$auto" = "true" ]; then
-    ( heroku addons:create jawsdb:kitefin -a "$app" || true ) &
-    for i in $(seq 1 24); do
-      jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
-      [ -n "$jurl" ] && break
-      sleep 5
-    done
-  fi
-  if [ -n "$jurl" ]; then
-    local user pass host db
-    user="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\1|')"
-    pass="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\2|')"
-    host="$(echo "$jurl" | sed -E 's|mysql://[^@]+@([^/]+)/.*|\\1|')"
-    db="$(  echo "$jurl" | sed -E 's|.*/([^?]+).*|\\1|')"
-
-    heroku config:set -a "$app" \
-      SPRING_DATASOURCE_URL="jdbc:mysql://${host}/${db}?useSSL=false&serverTimezone=UTC" \
-      SPRING_DATASOURCE_USERNAME="${user}" \
-      SPRING_DATASOURCE_PASSWORD="${pass}" >/dev/null
-  fi
-}
-
-ensure_db "$APP"
-
-docker tag ${DOCKER_USERNAME}/${IMAGE_NAME}/${IMAGE_TAG} registry.heroku.com/${APP}/web || docker tag ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} registry.heroku.com/${APP}/web
-docker push registry.heroku.com/${APP}/web
-heroku container:release -a "$APP" web
-
-heroku ps:scale web=1 -a "$APP" || true
-heroku releases -a "$APP" | head -n 5
-        '''
-      }
-    }
-
-    stage('Test PROD (HTTP 200)') {
-      when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
-      options { timeout(time: 3, unit: 'MINUTES') }
-      agent { docker { image 'curlimages/curl:8.8.0' } }
-      steps {
-        sh '''
-          set -eu
-          URL="https://paymybuddy-production-97c4996ae192.herokuapp.com/"
-          echo "Attente de stabilisation…"; sleep 30
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" -L --retry 10 --retry-delay 3 "$URL")
-          if [ "$CODE" -ne 200 ]; then
-            echo "❌ PROD: attendu 200, reçu $CODE pour $URL"
-            exit 1
-          fi
-          echo "✅ PROD OK (200) : $URL"
-        '''
-      }
-    }
-  }
-
-  post {
-    always {
-      echo 'Pipeline terminé.'
-    }
-  }
-}
+# Login Heroku non interactif (+ fa
