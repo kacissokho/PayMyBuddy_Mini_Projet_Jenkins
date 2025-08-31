@@ -13,8 +13,6 @@ Concevoir une pipeline **CI/CD Jenkins** qui :
 **Flux** : **GitHub (push/PR)** → **Webhook** → **Jenkins** → **Docker/Heroku** → **Slack**
 
 **Détails côté Jenkins (agents Docker)** :
-- Tests **unitaires & d’intégration** *(Maven/JDK 17)*  
-- **Analyse SonarCloud** *(Quality Gate)*  
 - **Build JAR → docker build → tag**  
 - **Push Docker Hub** *(artefact)*  
 - **Push** `registry.heroku.com` **+ release** sur **staging**  
@@ -35,7 +33,7 @@ Concevoir une pipeline **CI/CD Jenkins** qui :
 
 ---
 
-## 🏗️ Étapes de la pipeline *(toutes sous agent Docker)*
+## 🏗️ Étapes de la pipeline **
 
 ### 1) Tests automatisés
 - Exécuter **tests unitaires** et **tests d’intégration** *(Surefire/Failsafe)*.
