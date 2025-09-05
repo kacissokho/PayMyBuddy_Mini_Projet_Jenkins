@@ -41,6 +41,26 @@ fi
         sh 'docker build -t ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} .'
       }
     }
+
+    stage('Scan sécurité image') {
+      agent any
+      steps {
+        sh '''
+set -eu
+echo "Scan de sécurité avec Trivy (HIGH/CRITICAL)…"
+# Utilise Trivy via Docker pour scanner l'image locale.
+# Échec du stage si vulnérabilités HIGH/CRITICAL détectées.
+docker run --rm \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  aquasec/trivy:latest image \
+  --no-progress \
+  --severity HIGH,CRITICAL \
+  --exit-code 1 \
+  ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}
+'''
+      }
+    }
+
     stage('Heroku:déployer STAGING') {
       when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
       agent any
