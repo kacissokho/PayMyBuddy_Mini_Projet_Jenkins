@@ -142,7 +142,7 @@ stage('Test Production') {
   options { timeout(time: 2, unit: 'MINUTES') }
   agent { docker { image 'curlimages/curl:8.8.0' } }
   steps {
-    sh 'curl -fsSL -o /dev/null -L   https://paymybuddy-production-ced0cd4b464f.herokuapp.com/login'
+    sh 'curl -fsSL -o /dev/null -L    https://paymybuddy-production-6f68af46bb3b.herokuapp.com/login'
   }
 }
   }
