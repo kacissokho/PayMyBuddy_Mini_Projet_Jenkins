@@ -26,7 +26,8 @@ pipeline {
 set -eu
 if [ -f Dockerfile ]; then
   echo "Lance hadolint sur le Dockerfile…"
-  docker run --rm -v "$PWD":/work -w /work hadolint/hadolint hadolint Dockerfile
+  # Donne le Dockerfile via stdin pour éviter les erreurs "does not exist"
+  docker run --rm -i hadolint/hadolint hadolint - < Dockerfile
 else
   echo "Pas de Dockerfile détecté, linter sauté."
 fi
