@@ -26,7 +26,6 @@ pipeline {
 set -eu
 if [ -f Dockerfile ]; then
   echo "Lance hadolint sur le Dockerfile…"
-  # Donne le Dockerfile via stdin pour éviter les erreurs "does not exist"
   docker run --rm -i hadolint/hadolint hadolint - < Dockerfile
 else
   echo "Pas de Dockerfile détecté, linter sauté."
@@ -48,12 +47,11 @@ fi
         sh '''
 set -eu
 echo "Scan de sécurité avec Trivy (HIGH/CRITICAL)…"
-# Utilise Trivy via Docker pour scanner l'image locale.
-# Échec du stage si vulnérabilités HIGH/CRITICAL détectées.
 docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
   aquasec/trivy:latest image \
   --no-progress \
+  --scanners vuln \
   --severity HIGH,CRITICAL \
   --exit-code 1 \
   ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}
