@@ -13,11 +13,7 @@ pipeline {
     AUTO_PROVISION_JAWSDB = 'true'
     HEROKU_API_KEY = credentials('heroku_api_key')
 
-    // --- SonarQube (prérequis: variables/cred dans Jenkins) ---
-    SONAR_HOST_URL = credentials('sonar_host_url')  // ex: https://sonarqube.mondomaine.tld
-    SONAR_TOKEN    = credentials('sonar_token')     // token utilisateur/projet SonarQube
-    // Facultatif: branche principale détectée automatiquement, sinon préciser:
-    // SONAR_BRANCH   = 'master'
+
   }
 
   stages {
