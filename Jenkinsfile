@@ -81,7 +81,7 @@ heroku releases -a "$APP" | head -n 5
   options { timeout(time: 2, unit: 'MINUTES') }
   agent { docker { image 'curlimages/curl:8.8.0' } }
   steps {
-    sh 'curl -fsSL -o /dev/null -L  https://paymybuddy-staging-f24fd6eba824.herokuapp.com/login'
+    sh 'curl -fsSL -o /dev/null -L   https://paymybuddy-staging-13a40145efb2.herokuapp.com/login'
   }
 }
 
