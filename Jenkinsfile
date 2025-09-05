@@ -18,6 +18,22 @@ pipeline {
       agent any
       steps { checkout scm }
     }
+
+    stage('Linter') {
+      agent any
+      steps {
+        sh '''
+set -eu
+if [ -f Dockerfile ]; then
+  echo "Lance hadolint sur le Dockerfile…"
+  docker run --rm -v "$PWD":/work -w /work hadolint/hadolint hadolint Dockerfile
+else
+  echo "Pas de Dockerfile détecté, linter sauté."
+fi
+'''
+      }
+    }
+
     stage('Build image') {
       agent any
       steps {
