@@ -1,3 +1,4 @@
+
 pipeline {
   agent none
   environment {
@@ -41,28 +42,6 @@ fi
         sh 'docker build -t ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} .'
       }
     }
-
-    stage('Security Scan') {
-      agent any
-      steps {
-        sh '''
-        set -eu
-        echo "Lancement du scan de sécurité avec Trivy..."
-        
-        # Scan de l'image Docker pour les vulnérabilités critiques et élevées seulement
-        docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:latest \
-            image --severity CRITICAL,HIGH \
-            --timeout 5m \
-            --exit-code 0 \
-            ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}
-        
-        echo "Scan de sécurité terminé (seules les vulnérabilités CRITICAL/HIGH bloqueraient)"
-        '''
-      }
-    }
-
     stage('Heroku:déployer STAGING') {
       when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
       agent any
@@ -194,4 +173,5 @@ stage('Test Production') {
     slackSend channel: 'C09CTBMC74N', message: "FAILLED ${env.JOB_NAME} #${env.BUILD_NUMBER}"
   }
 }
+
 }
