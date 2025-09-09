@@ -19,6 +19,53 @@ pipeline {
       steps { checkout scm }
     }
 
+    stage('Code Quality Check') {
+      agent any
+      options {
+        timeout(time: 2, unit: 'MINUTES')
+      }
+      steps {
+        sh '''
+        set -eu
+        echo "Vérification basique de la qualité du code..."
+        
+        # Vérification de la structure du projet
+        echo "📁 Structure du projet:"
+        find . -name "*.java" -o -name "pom.xml" -o -name "Dockerfile" | head -10 || true
+        
+        # Vérification basique des fichiers Java
+        echo "🔍 Vérification des fichiers Java..."
+        JAVA_FILES=$(find . -name "*.java" | head -5)
+        if [ -n "$JAVA_FILES" ]; then
+            echo "Fichiers Java trouvés:"
+            echo "$JAVA_FILES"
+            # Vérification simple de syntaxe (non-bloquant)
+            for file in $JAVA_FILES; do
+                echo "Vérification de $file"
+                if head -n 1 "$file" | grep -q "package\\|import\\|public class"; then
+                    echo "✓ $file semble être un fichier Java valide"
+                else
+                    echo "⚠️  $file - structure inhabituelle"
+                fi
+            done
+        else
+            echo "Aucun fichier Java trouvé"
+        fi
+        
+        # Vérification de la présence de pom.xml pour Maven
+        if [ -f "pom.xml" ]; then
+            echo "📦 pom.xml détecté - projet Maven"
+            echo "Version Java:"
+            grep -i "<java.version>" pom.xml || echo "Version Java non spécifiée"
+            echo "Dépendances:"
+            grep -c "<dependency>" pom.xml | xargs echo "Nombre de dépendances:"
+        fi
+        
+        echo "✅ Vérification de qualité du code terminée (non-bloquant)"
+        '''
+      }
+    }
+
     stage('Linter') {
       agent any
       steps {
