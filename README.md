@@ -45,26 +45,35 @@ Le pipeline Jenkins est composé de plusieurs étapes automatisées permettant d
 ### 1. ✅ Checkout
 Récupère le code source depuis le dépôt Git afin d’avoir la dernière version du projet.  
 
-### 2. 🏗️ Build image
+### 2. ✅ Code Quality Check
+Vérifie la qualité du code (analyse statique, bonnes pratiques).
+
+### 3. ✅ Linter
+Analyse et corrige automatiquement le style et la syntaxe du code.
+
+### 4. 🏗️ Build image
 Construit l’image Docker de l’application, nécessaire pour le déploiement et les tests.  
 
-### 3. 🚀 Heroku: déployer STAGING
+### 5. ✅ Security Scan
+Analyse les dépendances et l’image Docker pour détecter des failles de sécurité.
+
+### 7. 🚀 Heroku: déployer STAGING
 Déploie automatiquement l’image construite sur l’environnement **STAGING** de Heroku (préproduction).  
 
 **![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/paymybuddy-staging.png)**
 
 
-### 4. 🧪 Test STAGING
+### 8. 🧪 Test STAGING
 Exécute les tests automatisés sur l’environnement **STAGING** afin de vérifier le bon fonctionnement de l’application avant de passer en production.  
 
-### 5. 🚀 Heroku: déployer PROD
+### 9. 🚀 Heroku: déployer PROD
 Déploie l’application sur l’environnement **PRODUCTION** de Heroku si toutes les étapes précédentes se sont bien déroulées.  
 
 **![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/paymybuddy-production.png)**
 
 
-### 6. 🔍 Test Production
+### 10. 🔍 Test Production
 Exécute un test simple sur l’environnement de **production** (ex. un `curl` pour vérifier l’accessibilité de l’application en ligne).  
 
-### 7. Slack Notification
+### 11. Slack Notification
 **![](https://github.com/kacissokho/PayMyBuddy_Mini_Projet_Jenkins/blob/master/.m2/Slack_Notif.png)**
