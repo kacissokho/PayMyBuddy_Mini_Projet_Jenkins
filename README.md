@@ -36,7 +36,7 @@ Flux : GitHub (push/PR) → Webhook → Jenkins → Docker/Heroku
 
 Le pipeline Jenkins est composé de plusieurs étapes automatisées permettant de **construire, tester et déployer** l’application sur **Heroku**.  
 
-**![](https://github.com/kacissokho/PayMyBuddy/blob/master/.m2/CI_CD.png)**
+**![](https://github.com/kacissokho/PayMyBuddy_Mini_Projet_Jenkins/blob/master/.m2/Heroku_stages.png)**
 
 **Sur Heroku**:
 **![](https://github.com/kacissokho/PayMyBuddy_Mini_Projet_Jenkins/blob/master/.m2/Heroku_dasbord.png)**
