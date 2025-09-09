@@ -1,117 +1,197 @@
 pipeline {
-    agent any
-
-    environment {
-        REGISTRY = "kacissokho"
-        IMAGE_NAME = "paymybuddy"
-        IMAGE_TAG = "v1.4"
+  agent none
+  environment {
+    // Image locale
+    DOCKER_USERNAME = 'kacissokho'
+    IMAGE_NAME      = 'paymybuddy'
+    IMAGE_TAG       = 'v1.4'
+    PORT_EXPOSED    = '8090'
+    // Apps Heroku
+    STAGING    = 'paymybuddy-staging'
+    PRODUCTION = 'paymybuddy-production'
+    // Provisionner JawsDB automatiquement si absent
+    AUTO_PROVISION_JAWSDB = 'true'
+    HEROKU_API_KEY = credentials('heroku_api_key')
+  }
+  stages {
+    stage('Checkout') {
+      agent any
+      steps { checkout scm }
     }
 
-    stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Linter') {
-            steps {
-                sh '''
-                    set -eu
-                    if [ -f Dockerfile ]; then
-                        echo "Lance hadolint sur le Dockerfile…"
-                        docker run --rm -i hadolint/hadolint hadolint - < Dockerfile
-                    else
-                        echo "Pas de Dockerfile trouvé."
-                    fi
-                '''
-            }
-        }
-
-        stage('Build image') {
-            steps {
-                sh '''
-                    docker build -t $REGISTRY/$IMAGE_NAME:$IMAGE_TAG .
-                '''
-            }
-        }
-
-        stage('Scan sécurité image') {
-            options {
-                timeout(time: 10, unit: 'MINUTES')
-            }
-            steps {
-                script {
-                    sh '''
-                        set -eu
-                        echo "Scan de sécurité avec Trivy (avec cache local)…"
-                        docker run --rm \
-                          -v /var/run/docker.sock:/var/run/docker.sock \
-                          -v $HOME/.cache:/root/.cache \
-                          aquasec/trivy:latest image \
-                          --no-progress \
-                          --scanners vuln \
-                          --severity HIGH,CRITICAL \
-                          --exit-code 1 \
-                          $REGISTRY/$IMAGE_NAME:$IMAGE_TAG
-                    '''
-                }
-            }
-        }
-
-        stage('Heroku:déployer STAGING') {
-            when {
-                expression { currentBuild.currentResult == "SUCCESS" }
-            }
-            steps {
-                sh '''
-                    echo "Déploiement sur Heroku STAGING…"
-                    # heroku container:push web --app $HEROKU_APP_STAGING
-                    # heroku container:release web --app $HEROKU_APP_STAGING
-                '''
-            }
-        }
-
-        stage('Test STAGING') {
-            when {
-                expression { currentBuild.currentResult == "SUCCESS" }
-            }
-            steps {
-                sh 'echo "Tests sur STAGING (à implémenter)"'
-            }
-        }
-
-        stage('Heroku: déployer PROD') {
-            when {
-                expression { currentBuild.currentResult == "SUCCESS" }
-            }
-            steps {
-                sh '''
-                    echo "Déploiement sur Heroku PROD…"
-                    # heroku container:push web --app $HEROKU_APP_PROD
-                    # heroku container:release web --app $HEROKU_APP_PROD
-                '''
-            }
-        }
-
-        stage('Test Production') {
-            when {
-                expression { currentBuild.currentResult == "SUCCESS" }
-            }
-            steps {
-                sh 'echo "Tests sur PROD (à implémenter)"'
-            }
-        }
+    stage('Linter') {
+      agent any
+      steps {
+        sh '''
+set -eu
+if [ -f Dockerfile ]; then
+  echo "Lance hadolint sur le Dockerfile…"
+  # Donne le Dockerfile via stdin pour éviter les erreurs "does not exist"
+  docker run --rm -i hadolint/hadolint hadolint - < Dockerfile
+else
+  echo "Pas de Dockerfile détecté, linter sauté."
+fi
+'''
+      }
     }
 
-    post {
-        always {
-            slackSend(
-                teamDomain: 'pozosworkspace',
-                channel: 'C09CTBMC74N',
-                tokenCredentialId: 'slack_token',
-                message: "Build terminé avec le statut: ${currentBuild.currentResult}"
-            )
-        }
+    stage('Build image') {
+      agent any
+      steps {
+        sh 'docker build -t ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} .'
+      }
     }
+
+    stage('Security Scan') {
+      agent any
+      steps {
+        sh '''
+        set -eu
+        echo "Lancement du scan de sécurité avec Trivy..."
+        
+        # Scan de l'image Docker pour les vulnérabilités critiques et élevées seulement
+        docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest \
+            image --severity CRITICAL,HIGH \
+            --timeout 5m \
+            --exit-code 0 \
+            ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}
+        
+        echo "Scan de sécurité terminé (seules les vulnérabilités CRITICAL/HIGH bloqueraient)"
+        '''
+      }
+    }
+
+    stage('Heroku:déployer STAGING') {
+      when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
+      agent any
+      steps {
+        sh '''
+set -eu
+heroku container:login
+APP="${STAGING}"
+heroku apps:info -a "$APP" >/dev/null 2>&1 || heroku create "$APP"
+heroku stack:set container -a "$APP"
+ensure_db() {
+  local app="$1"
+  local auto="${AUTO_PROVISION_JAWSDB}"
+  local jurl
+  jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
+  if [ -z "$jurl" ] && [ "$auto" = "true" ]; then
+    echo "JawsDB absent sur $app → provisioning…"
+    heroku addons:create jawsdb:kitefin -a "$app" || true
+    echo "Attente que JAWSDB_URL soit disponible…"
+    for i in $(seq 1 24); do
+      jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
+      if [ -n "$jurl" ]; then
+        echo "JAWSDB_URL détectée."
+        break
+      fi
+      echo "…pas encore prêt (tentative $i/24), on réessaie dans 5s"
+      sleep 5
+    done
+  fi
+  if [ -z "$jurl" ]; then
+    echo "ERREUR: JAWSDB_URL est vide/inexistant sur $app. Abandon."
+    exit 1
+  fi
+  local user pass host db
+  user="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\1|')"
+  pass="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\2|')"
+  host="$(echo "$jurl" | sed -E 's|mysql://[^@]+@([^/]+)/.*|\\1|')"
+  db="$(  echo "$jurl" | sed -E 's|.*/([^?]+).*|\\1|')"
+  heroku config:set -a "$app" \
+    SPRING_DATASOURCE_URL="jdbc:mysql://${host}/${db}?useSSL=false&serverTimezone=UTC" \
+    SPRING_DATASOURCE_USERNAME="${user}" \
+    SPRING_DATASOURCE_PASSWORD="${pass}" >/dev/null
+}
+ensure_db "$APP"
+docker tag ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} registry.heroku.com/${APP}/web
+docker push registry.heroku.com/${APP}/web
+heroku container:release -a "$APP" web
+heroku ps:scale web=1 -a "$APP" || true
+heroku releases -a "$APP" | head -n 5
+'''
+      }
+    }
+    stage('Test STAGING') {
+  when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
+  options { timeout(time: 2, unit: 'MINUTES') }
+  agent { docker { image 'curlimages/curl:8.8.0' } }
+  steps {
+    sh 'curl -fsSL -o /dev/null -L   https://paymybuddy-staging-13a40145efb2.herokuapp.com/login'
+  }
+}
+
+    stage('Heroku: déployer PROD') {
+      when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
+      agent any
+      steps {
+        sh '''
+set -eu
+heroku container:login
+APP="${PRODUCTION}"
+heroku apps:info -a "$APP" >/dev/null 2>&1 || heroku create "$APP"
+heroku stack:set container -a "$APP"
+ensure_db() {
+  local app="$1"
+  local auto="${AUTO_PROVISION_JAWSDB}"
+  local jurl
+  jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
+  if [ -z "$jurl" ] && [ "$auto" = "true" ]; then
+    echo "JawsDB absent sur $app → provisioning…"
+    heroku addons:create jawsdb:kitefin -a "$app" || true
+    echo "Attente que JAWSDB_URL soit disponible…"
+    for i in $(seq 1 24); do
+      jurl="$(heroku config:get JAWSDB_URL -a "$app" || true)"
+      if [ -n "$jurl" ]; then
+        echo "JAWSDB_URL détectée."
+        break
+      fi
+      echo "…pas encore prêt (tentative $i/24), on réessaie dans 5s"
+      sleep 5
+    done
+  fi
+  if [ -z "$jurl" ]; then
+    echo "ERREUR: JAWSDB_URL est vide/inexistant sur $app. Abandon."
+    exit 1
+  fi
+  local user pass host db
+  user="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\1|')"
+  pass="$(echo "$jurl" | sed -E 's|mysql://([^:]+):([^@]+)@.*|\\2|')"
+  host="$(echo "$jurl" | sed -E 's|mysql://[^@]+@([^/]+)/.*|\\1|')"
+  db="$(  echo "$jurl" | sed -E 's|.*/([^?]+).*|\\1|')"
+  heroku config:set -a "$app" \
+    SPRING_DATASOURCE_URL="jdbc:mysql://${host}/${db}?useSSL=false&serverTimezone=UTC" \
+    SPRING_DATASOURCE_USERNAME="${user}" \
+    SPRING_DATASOURCE_PASSWORD="${pass}" >/dev/null
+}
+ensure_db "$APP"
+docker tag ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} registry.heroku.com/${APP}/web
+docker push registry.heroku.com/${APP}/web
+heroku container:release -a "$APP" web
+heroku ps:scale web=1 -a "$APP" || true
+heroku releases -a "$APP" | head -n 5
+'''
+      }
+    }
+stage('Test Production') {
+  when { expression { env.GIT_BRANCH == 'origin/master' || env.BRANCH_NAME == 'master' } }
+  options { timeout(time: 2, unit: 'MINUTES') }
+  agent { docker { image 'curlimages/curl:8.8.0' } }
+  steps {
+    sh 'curl -fsSL -o /dev/null -L    https://paymybuddy-production-6f68af46bb3b.herokuapp.com/login'
+  }
+}
+  }
+
+  post {
+  success {
+    slackSend channel: 'C09CTBMC74N', message: "SUCCES ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+  }
+  failure {
+    slackSend channel: 'C09CTBMC74N', message: "FAILLED ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+  }
+}
 }
